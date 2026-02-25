@@ -1,136 +1,143 @@
-import streamlit as st
-import pandas as pd
 import io
-import datetime as _dt
-import re
+import os
+import sys
+import uuid
+import shutil
+import tempfile
+import subprocess
 from pathlib import Path
-from openpyxl import Workbook
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from openpyxl.utils import get_column_letter
-from openpyxl.utils.dataframe import dataframe_to_rows
 
-# --- LAS FUNCIONES DE TU REPARTO_GPT.PY ---
+import pandas as pd
+import streamlit as st
 
-def clean_text(x) -> str:
-    if pd.isna(x): return ""
-    s = str(x).strip()
-    s = re.sub(r"\s+", " ", s)
-    return s.upper()
+st.set_page_config(page_title="Reparto determinista", layout="wide")
 
-def style_sheet(ws):
-    header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
-    header_font = Font(color="FFFFFF", bold=True)
-    thin_side = Side(border_style="thin", color="000000")
-    border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
-    alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    for cell in ws[1]:
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = alignment
-        cell.border = border
-    for row in ws.iter_rows(min_row=2):
-        for cell in row:
-            cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
-            cell.border = border
+st.title("Reparto determinista")
+st.caption("Sube archivos → ejecuta scripts → descarga Excel. Sin rutas locales.")
 
-def set_widths(ws, widths):
-    for i, w in enumerate(widths, 1):
-        ws.column_dimensions[get_column_letter(i)].width = w
+# --- Utilidades ---
+def run_cmd(cmd: list[str], cwd: Path) -> tuple[int, str, str]:
+    """Ejecuta comando y devuelve (returncode, stdout, stderr)."""
+    p = subprocess.run(
+        cmd,
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+    )
+    return p.returncode, p.stdout, p.stderr
 
-# --- INTERFAZ DE STREAMLIT ---
+def save_upload(uploaded_file, dst: Path) -> Path:
+    dst.write_bytes(uploaded_file.getbuffer())
+    return dst
 
-st.set_page_config(page_title="ZAAL IA", layout="wide")
-st.title("🚚 ZAAL IA: Generador de salida.xlsx")
+def show_logs(stdout: str, stderr: str):
+    if stdout.strip():
+        st.subheader("STDOUT")
+        st.code(stdout)
+    if stderr.strip():
+        st.subheader("STDERR")
+        st.code(stderr)
 
-f_csv = st.file_uploader("Sube el CSV de LLEGADAS", type=["csv"])
+# --- Sesión / workspace ---
+if "workdir" not in st.session_state:
+    st.session_state.workdir = Path(tempfile.mkdtemp(prefix="reparto_"))
+    st.session_state.run_id = str(uuid.uuid4())[:8]
 
-if f_csv and st.button("EJECUTAR CLASIFICACIÓN"):
+workdir: Path = st.session_state.workdir
+
+with st.sidebar:
+    st.header("Estado")
+    st.write(f"Run: `{st.session_state.run_id}`")
+    st.write(f"Workdir: `{workdir}`")
+
+    if st.button("Reset sesión"):
+        try:
+            shutil.rmtree(workdir, ignore_errors=True)
+        finally:
+            st.session_state.workdir = Path(tempfile.mkdtemp(prefix="reparto_"))
+            st.session_state.run_id = str(uuid.uuid4())[:8]
+        st.rerun()
+
+st.divider()
+
+# --- Inputs ---
+col1, col2 = st.columns(2, gap="large")
+
+with col1:
+    st.subheader("1) Subida de archivos")
+    csv_file = st.file_uploader("CSV de llegadas", type=["csv"], key="csv")
+    reglas_file = st.file_uploader("Excel reglas (hospitales/zonas/etc.)", type=["xlsx"], key="reglas")
+
+    st.caption("Consejo: usa nombres simples y sin espacios raros.")
+
+with col2:
+    st.subheader("2) Opciones")
+    sep = st.selectbox("Separador CSV", options=[";", ",", "TAB"], index=0)
+    sep_val = "\t" if sep == "TAB" else sep
+    encoding = st.selectbox("Encoding", options=["utf-8", "latin1", "cp1252"], index=0)
+
+    preview_rows = st.slider("Filas de previsualización", 5, 50, 10)
+
+st.divider()
+
+# --- Guardado + preview ---
+if csv_file and reglas_file:
+    csv_path = save_upload(csv_file, workdir / "llegadas.csv")
+    reglas_path = save_upload(reglas_file, workdir / "Reglas_hospitales.xlsx")
+
+    st.subheader("Previsualización")
     try:
-        # Cargar datos
-        df_llegadas = pd.read_csv(f_csv, sep=None, engine='python', encoding='latin-1')
-        xl_reglas = pd.ExcelFile("Reglas_hospitales.xlsx")
-        df_h_reg = xl_reglas.parse('REGLAS_HOSPITALES')
-        df_f_reg = xl_reglas.parse('REGLAS_FEDERACION')
-
-        # --- LÓGICA DE PROCESAMIENTO (TU REPARTO_GPT.PY) ---
-        df_h_reg['Patrón_dirección'] = df_h_reg['Patrón_dirección'].apply(clean_text)
-        df_f_reg['Patrón_dirección'] = df_f_reg['Patrón_dirección'].apply(clean_text)
-        
-        df_total_reglas = pd.concat([df_h_reg, df_f_reg], ignore_index=True)
-        df_total_reglas["len"] = df_total_reglas["Patrón_dirección"].str.len()
-        df_total_reglas = df_total_reglas.sort_values("len", ascending=False).drop(columns=["len"])
-
-        col_dir = next((c for c in df_llegadas.columns if "DIR" in c.upper()), df_llegadas.columns[0])
-        df_llegadas["Z.Rep"] = "RESTO (sin ruta)"
-        
-        # Marcar Hospitales y Federación
-        patrones_h = set(df_h_reg["Patrón_dirección"].unique())
-        patrones_f = set(df_f_reg["Patrón_dirección"].unique())
-        df_llegadas["Es_Hospital"] = False
-        df_llegadas["Es_Federacion"] = False
-
-        for idx, fila in df_llegadas.iterrows():
-            txt = clean_text(fila[col_dir])
-            for _, reg in df_total_reglas.iterrows():
-                p = reg["Patrón_dirección"]
-                if p and p in txt:
-                    df_llegadas.at[idx, "Z.Rep"] = reg["Ruta"]
-                    if p in patrones_h: df_llegadas.at[idx, "Es_Hospital"] = True
-                    if p in patrones_f: df_llegadas.at[idx, "Es_Federacion"] = True
-                    break
-
-        # --- CONSTRUCCIÓN DEL EXCEL (TU ESTRUCTURA) ---
-        wb = Workbook()
-        
-        # 1. METADATOS
-        ws_meta = wb.active
-        ws_meta.title = "METADATOS"
-        ws_meta.append(["Nº", "Clave", "Valor"])
-        ws_meta.append([1, "Origen de datos", "LLEGADAS"])
-        ws_meta.append([2, "CSV", f_csv.name])
-        ws_meta.append([3, "Reglas", "Reglas_hospitales.xlsx"])
-        ws_meta.append([4, "Generado", _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
-        style_sheet(ws_meta)
-        set_widths(ws_meta, [5, 20, 40])
-
-        # 2. RESUMEN_GENERAL
-        ws_res_gen = wb.create_sheet("RESUMEN_GENERAL")
-        # Aquí va tu lógica de conteo por bloques
-        h_mask = df_llegadas["Es_Hospital"]
-        f_mask = df_llegadas["Es_Federacion"]
-        r_mask = ~(h_mask | f_mask)
-        
-        res_data = [
-            ["Nº", "Bloque", "Paradas", "Expediciones", "Kilos"],
-            [1, "HOSPITALES", df_llegadas[h_mask][col_dir].nunique(), df_llegadas[h_mask]["Expediciones"].sum(), df_llegadas[h_mask]["Kilos"].sum()],
-            [2, "FEDERACION", df_llegadas[f_mask][col_dir].nunique(), df_llegadas[f_mask]["Expediciones"].sum(), df_llegadas[f_mask]["Kilos"].sum()],
-            [3, "RESTO (todas rutas)", df_llegadas[r_mask][col_dir].nunique(), df_llegadas[r_mask]["Expediciones"].sum(), df_llegadas[r_mask]["Kilos"].sum()]
-        ]
-        for row in res_data: ws_res_gen.append(row)
-        style_sheet(ws_res_gen)
-
-        # 3. HOSPITALES y FEDERACION (Hojas detalle)
-        for name, mask in [("HOSPITALES", h_mask), ("FEDERACION", f_mask)]:
-            ws = wb.create_sheet(name)
-            df_sub = df_llegadas[mask]
-            for r in dataframe_to_rows(df_sub, index=False, header=True): ws.append(r)
-            style_sheet(ws)
-
-        # 4. ZREPS
-        for r_name in sorted(df_llegadas["Z.Rep"].unique()):
-            safe_name = f"ZREP_{str(r_name)[:20]}".replace("/", " ")[:31]
-            ws = wb.create_sheet(title=safe_name)
-            df_z = df_llegadas[df_llegadas["Z.Rep"] == r_name].copy()
-            df_z.insert(0, "Parada", range(1, len(df_z) + 1))
-            for row in dataframe_to_rows(df_z, index=False, header=True): ws.append(row)
-            style_sheet(ws)
-            set_widths(ws, [8, 18, 55, 70, 16, 12, 12, 22])
-
-        # Salida
-        buf = io.BytesIO()
-        wb.save(buf)
-        st.success("✅ Clasificación finalizada.")
-        st.download_button("💾 DESCARGAR SALIDA.XLSX", buf.getvalue(), "salida.xlsx")
-
+        df_prev = pd.read_csv(csv_path, sep=sep_val, encoding=encoding)
+        st.dataframe(df_prev.head(preview_rows), use_container_width=True)
+        st.caption(f"Columnas detectadas: {list(df_prev.columns)}")
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error("No he podido leer el CSV con ese separador/encoding.")
+        st.exception(e)
+
+    st.divider()
+
+    # --- Ejecución ---
+    st.subheader("3) Ejecutar")
+    run_reparto = st.button("Generar salida.xlsx", type="primary")
+
+    if run_reparto:
+        st.info("Ejecutando scripts…")
+
+        # Ajusta aquí tus scripts y argumentos.
+        # Importante: sys.executable para que en cloud apunte al python correcto.
+        cmd = [
+            sys.executable, "reparto_gpt.py",
+            "--csv", str(csv_path.name),
+            "--reglas", str(reglas_path.name),
+            "--out", "salida.xlsx",
+        ]
+
+        rc, out, err = run_cmd(cmd, cwd=workdir)
+
+        if rc != 0:
+            st.error("Falló reparto_gpt.py")
+            show_logs(out, err)
+        else:
+            st.success("OK: salida.xlsx generada.")
+            salida_path = workdir / "salida.xlsx"
+
+            # Vista rápida del Excel
+            try:
+                df_out = pd.read_excel(salida_path)
+                st.dataframe(df_out.head(preview_rows), use_container_width=True)
+            except Exception:
+                st.warning("No he podido previsualizar el Excel, pero el archivo existe.")
+
+            # Botón descarga
+            st.download_button(
+                "Descargar salida.xlsx",
+                data=salida_path.read_bytes(),
+                file_name="salida.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+
+else:
+    st.warning("Sube el CSV y el Excel de reglas para habilitar la ejecución.")
+
+st.divider()
+st.caption("Si algo falla, quiero ver el STDERR aquí mismo. Eso es lo que evita perder horas.")
