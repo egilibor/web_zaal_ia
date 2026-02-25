@@ -1,286 +1,130 @@
-import sys
-import uuid
-import shutil
-import tempfile
-import subprocess
+# reparto_gemini.py (sin input) — v2
+# Uso:
+#   python reparto_gemini.py --seleccion "0,1,3-5"
+#   python reparto_gemini.py --seleccion "all"
+# Opcional:
+#   --in salida.xlsx
+#   --out PLAN.xlsx
+#
+# Nota: sigue usando el mismo criterio de exclusión de hojas que tu versión:
+# excluye hojas que contengan VINAROZ, MORELLA o RESUMEN.
+
+import argparse
+import re
 from pathlib import Path
+from datetime import datetime
 
 import pandas as pd
-import streamlit as st
-
-st.set_page_config(page_title="Reparto determinista", layout="wide")
-st.title("Reparto determinista (Streamlit)")
-
-# --- Paths en repo ---
-REPO_DIR = Path(__file__).resolve().parent
-SCRIPT_REPARTO = REPO_DIR / "reparto_gpt.py"
-SCRIPT_GEMINI = REPO_DIR / "reparto_gemini.py"
-REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
-
-# -------------------------
-# Utilidades
-# -------------------------
-def ensure_workdir() -> Path:
-    if "workdir" not in st.session_state:
-        st.session_state.workdir = Path(tempfile.mkdtemp(prefix="reparto_"))
-        st.session_state.run_id = str(uuid.uuid4())[:8]
-    return st.session_state.workdir
 
 
-def reset_session_dir():
-    wd = st.session_state.get("workdir")
-    if wd and isinstance(wd, Path):
-        shutil.rmtree(wd, ignore_errors=True)
-    st.session_state.workdir = Path(tempfile.mkdtemp(prefix="reparto_"))
-    st.session_state.run_id = str(uuid.uuid4())[:8]
+EXCLUDE_TOKENS = ("VINAROZ", "MORELLA", "RESUMEN")
 
 
-def save_upload(uploaded_file, dst: Path) -> Path:
-    dst.write_bytes(uploaded_file.getbuffer())
-    return dst
+def parse_selection(sel: str, n: int) -> list[int]:
+    """
+    Convierte "0,1,3-5" en [0,1,3,4,5].
+    Acepta "all".
+    Valida rango 0..n-1.
+    """
+    sel = (sel or "").strip().lower()
+    if sel in ("all", "*"):
+        return list(range(n))
+
+    if not sel:
+        raise ValueError("Selección vacía. Usa --seleccion \"0\" o --seleccion \"all\".")
+
+    out: set[int] = set()
+    parts = [p.strip() for p in sel.split(",") if p.strip()]
+    for p in parts:
+        if "-" in p:
+            a, b = p.split("-", 1)
+            a = a.strip()
+            b = b.strip()
+            if not a.isdigit() or not b.isdigit():
+                raise ValueError(f"Rango inválido: '{p}'")
+            ia = int(a)
+            ib = int(b)
+            if ia > ib:
+                ia, ib = ib, ia
+            for k in range(ia, ib + 1):
+                out.add(k)
+        else:
+            if not p.isdigit():
+                raise ValueError(f"Índice inválido: '{p}'")
+            out.add(int(p))
+
+    bad = [i for i in sorted(out) if i < 0 or i >= n]
+    if bad:
+        raise ValueError(f"Índices fuera de rango: {bad}. Rango válido: 0..{n-1}")
+
+    return sorted(out)
 
 
-def run_cmd(cmd: list[str], cwd: Path) -> tuple[int, str, str]:
-    p = subprocess.run(
-        cmd,
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
-    )
-    return p.returncode, p.stdout, p.stderr
+def eligible_sheets(xlsx_path: Path) -> list[str]:
+    xl = pd.ExcelFile(xlsx_path)
+    sheets = []
+    for name in xl.sheet_names:
+        up = name.upper()
+        if any(tok in up for tok in EXCLUDE_TOKENS):
+            continue
+        sheets.append(name)
+    return sheets
 
 
-def run_cmd_input(cmd: list[str], cwd: Path, stdin_text: str) -> tuple[int, str, str]:
-    p = subprocess.run(
-        cmd,
-        cwd=str(cwd),
-        input=stdin_text,
-        capture_output=True,
-        text=True,
-    )
-    return p.returncode, p.stdout, p.stderr
+def plan_from_sheets(xlsx_path: Path, sheet_names: list[str]) -> dict[str, pd.DataFrame]:
+    """
+    Lee las hojas seleccionadas y las devuelve como dict hoja->DataFrame.
+    Aquí NO invento ninguna lógica adicional.
+    Si tu script original hacía transformaciones, dímelo y las replico 1:1.
+    """
+    out: dict[str, pd.DataFrame] = {}
+    for sh in sheet_names:
+        out[sh] = pd.read_excel(xlsx_path, sheet_name=sh)
+    return out
 
 
-def show_logs(stdout: str, stderr: str):
-    if stdout.strip():
-        st.subheader("STDOUT")
-        st.code(stdout)
-    if stderr.strip():
-        st.subheader("STDERR")
-        st.code(stderr)
+def default_out_name() -> str:
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"PLAN_{stamp}.xlsx"
 
 
-def list_plan_files(workdir: Path) -> list[Path]:
-    return sorted(workdir.glob("PLAN_*.xlsx"), key=lambda x: x.stat().st_mtime, reverse=True)
+def main():
+    ap = argparse.ArgumentParser(description="Genera plan desde salida.xlsx sin interacción (sin input).")
+    ap.add_argument("--seleccion", required=True, help='Ej: "0,1,3-5" o "all"')
+    ap.add_argument("--in", dest="in_path", default="salida.xlsx", help="Excel de entrada. Por defecto: salida.xlsx")
+    ap.add_argument("--out", dest="out_path", default="", help="Excel de salida. Por defecto: PLAN_YYYYMMDD_HHMMSS.xlsx")
+    args = ap.parse_args()
+
+    xlsx_path = Path(args.in_path).resolve()
+    if not xlsx_path.exists():
+        raise FileNotFoundError(f"No existe el Excel de entrada: {xlsx_path}")
+
+    sheets = eligible_sheets(xlsx_path)
+    if not sheets:
+        raise RuntimeError("No hay hojas elegibles (todas excluidas por VINAROZ/MORELLA/RESUMEN).")
+
+    idxs = parse_selection(args.seleccion, len(sheets))
+    selected = [sheets[i] for i in idxs]
+
+    # Construye el plan (lectura 1:1)
+    data = plan_from_sheets(xlsx_path, selected)
+
+    out_name = args.out_path.strip() or default_out_name()
+    out_path = Path(out_name).resolve()
+
+    # Escribe un Excel con una pestaña por hoja seleccionada, más una pestaña RESUMEN simple
+    with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
+        resumen_rows = []
+        for sh, df in data.items():
+            df.to_excel(writer, sheet_name=sh[:31], index=False)
+            resumen_rows.append({"Hoja": sh, "Filas": int(df.shape[0]), "Columnas": int(df.shape[1])})
+
+        pd.DataFrame(resumen_rows).to_excel(writer, sheet_name="RESUMEN_PLAN", index=False)
+
+    print(f"OK: {out_path.name}")
+    print("SELECCION:", args.seleccion)
+    print("HOJAS:", selected)
 
 
-# -------------------------
-# Estado
-# -------------------------
-workdir = ensure_workdir()
-
-with st.sidebar:
-    st.header("Estado")
-    st.write(f"Run: `{st.session_state.run_id}`")
-    st.write(f"Workdir: `{workdir}`")
-    st.write(f"Repo dir: `{REPO_DIR}`")
-    st.write(f"Python: `{sys.executable}`")
-
-    st.divider()
-    st.write(f"Script GPT: `{SCRIPT_REPARTO}`")
-    st.write(f"GPT exists: `{SCRIPT_REPARTO.exists()}`")
-    st.write(f"Script Gemini: `{SCRIPT_GEMINI}`")
-    st.write(f"Gemini exists: `{SCRIPT_GEMINI.exists()}`")
-    st.write(f"Reglas: `{REGLAS_REPO}`")
-    st.write(f"Reglas exists: `{REGLAS_REPO.exists()}`")
-
-    st.divider()
-    try:
-        st.write("Repo files:", sorted([p.name for p in REPO_DIR.iterdir()]))
-    except Exception as e:
-        st.write("Repo files: (error)")
-        st.write(str(e))
-
-    if st.button("Reset sesión"):
-        reset_session_dir()
-        st.rerun()
-
-
-# -------------------------
-# Verificaciones
-# -------------------------
-missing = []
-if not SCRIPT_REPARTO.exists():
-    missing.append("reparto_gpt.py")
-if not SCRIPT_GEMINI.exists():
-    missing.append("reparto_gemini.py")
-if not REGLAS_REPO.exists():
-    missing.append("Reglas_hospitales.xlsx")
-
-if missing:
-    st.error(
-        "Faltan archivos en el repo desplegado: " + ", ".join(missing) + "\n\n"
-        "Revisa que estén en el branch desplegado (main) y en la misma carpeta que app.py."
-    )
-    st.stop()
-
-st.divider()
-
-# -------------------------
-# Inputs
-# -------------------------
-st.subheader("1) Subir CSV de llegadas")
-csv_file = st.file_uploader("CSV de llegadas", type=["csv"])
-
-st.subheader("2) Previsualización (opcional, no afecta a ejecución)")
-col1, col2 = st.columns(2, gap="large")
-with col1:
-    sep = st.selectbox("Separador CSV (solo para vista previa)", options=[";", ",", "TAB"], index=0)
-    sep_val = "\t" if sep == "TAB" else sep
-with col2:
-    encoding = st.selectbox("Encoding (solo para vista previa)", options=["utf-8", "latin1", "cp1252"], index=0)
-
-preview_rows = st.slider("Filas de previsualización", 5, 50, 10)
-
-st.divider()
-
-if not csv_file:
-    st.info("Sube el CSV para habilitar la ejecución.")
-    st.stop()
-
-# Guardar CSV en workdir
-csv_path = save_upload(csv_file, workdir / "llegadas.csv")
-
-# Copiar reglas del repo al workdir
-(workdir / "Reglas_hospitales.xlsx").write_bytes(REGLAS_REPO.read_bytes())
-
-# Preview CSV (solo visual)
-try:
-    df_prev = pd.read_csv(csv_path, sep=sep_val, encoding=encoding)
-    st.dataframe(df_prev.head(preview_rows), use_container_width=True)
-    st.caption(f"Columnas detectadas: {list(df_prev.columns)}")
-except Exception as e:
-    st.warning("No he podido previsualizar el CSV con ese separador/encoding (no afecta al script).")
-    st.exception(e)
-
-st.divider()
-
-# -------------------------
-# Ejecución paso 1: reparto_gpt.py
-# -------------------------
-st.subheader("3) Ejecutar reparto_gpt.py (genera salida.xlsx)")
-
-if st.button("Generar salida.xlsx", type="primary"):
-    cmd = [
-        sys.executable,
-        str(SCRIPT_REPARTO),
-        "--csv", "llegadas.csv",
-        "--reglas", "Reglas_hospitales.xlsx",
-        "--out", "salida.xlsx",
-    ]
-    st.write("CMD:", cmd)
-    st.info("Ejecutando reparto_gpt.py…")
-
-    rc, out, err = run_cmd(cmd, cwd=workdir)
-
-    if rc != 0:
-        st.error("❌ Falló reparto_gpt.py")
-        show_logs(out, err)
-        st.stop()
-
-    salida_path = workdir / "salida.xlsx"
-    if not salida_path.exists():
-        st.error("Terminó sin error, pero no encuentro `salida.xlsx` en el workdir.")
-        show_logs(out, err)
-        st.stop()
-
-    st.success("✅ salida.xlsx generada")
-
-    # Preview salida.xlsx (si se puede)
-    try:
-        df_out = pd.read_excel(salida_path)
-        st.dataframe(df_out.head(preview_rows), use_container_width=True)
-    except Exception:
-        st.warning("No he podido previsualizar salida.xlsx, pero el archivo existe.")
-
-    st.download_button(
-        "Descargar salida.xlsx",
-        data=salida_path.read_bytes(),
-        file_name="salida.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-
-st.divider()
-
-# -------------------------
-# Ejecución paso 2: reparto_gemini.py
-# -------------------------
-st.subheader("4) Ejecutar reparto_gemini.py (genera PLAN_*.xlsx)")
-st.caption("Este script lee `salida.xlsx` y pide la selección por stdin (ej: 0, 1, 3-5).")
-
-salida_exists = (workdir / "salida.xlsx").exists()
-if not salida_exists:
-    st.warning("Primero genera `salida.xlsx` con el paso 3.")
-else:
-    # Mostrar hojas e índices (mismo criterio de exclusión que usa el script)
-    try:
-        xl = pd.ExcelFile(workdir / "salida.xlsx")
-        hojas_disp = [
-            h for h in xl.sheet_names
-            if not any(x in h.upper() for x in ["VINAROZ", "MORELLA", "RESUMEN"])
-        ]
-        st.write("Rutas disponibles (índice → hoja):")
-        for i, h in enumerate(hojas_disp):
-            st.write(f"[{i}] {h}")
-    except Exception:
-        st.warning("No he podido listar hojas de salida.xlsx, pero puedes intentar ejecutar igualmente.")
-
-    seleccion = st.text_input("Selección (ej: 0, 1, 3-5)", value="0")
-
-    colA, colB = st.columns(2, gap="large")
-    with colA:
-        run_plan = st.button("Generar PLAN_*.xlsx", type="secondary")
-    with colB:
-        st.caption("Consejo: usa índices tal como aparecen arriba.")
-
-    if run_plan:
-        # Borramos planes anteriores para detectar el nuevo con seguridad
-        for f in workdir.glob("PLAN_*.xlsx"):
-            try:
-                f.unlink()
-            except Exception:
-                pass
-
-        cmd2 = [sys.executable, str(SCRIPT_GEMINI)]
-        st.write("CMD:", cmd2)
-        st.info("Ejecutando reparto_gemini.py…")
-
-        rc2, out2, err2 = run_cmd_input(cmd2, cwd=workdir, stdin_text=(seleccion.strip() + "\n"))
-
-        if rc2 != 0:
-            st.error("❌ Falló reparto_gemini.py")
-            show_logs(out2, err2)
-            st.stop()
-
-        planes = list_plan_files(workdir)
-        if not planes:
-            st.error("Terminó sin error, pero no encuentro PLAN_*.xlsx en el workdir.")
-            show_logs(out2, err2)
-            st.stop()
-
-        plan_path = planes[0]
-        st.success(f"✅ Generado: {plan_path.name}")
-
-        st.download_button(
-            f"Descargar {plan_path.name}",
-            data=plan_path.read_bytes(),
-            file_name=plan_path.name,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-
-        # Preview opcional
-        try:
-            df_plan = pd.read_excel(plan_path)
-            st.dataframe(df_plan.head(preview_rows), use_container_width=True)
-        except Exception:
-            st.warning("No he podido previsualizar el PLAN, pero el archivo está generado.")
+if __name__ == "__main__":
+    main()
