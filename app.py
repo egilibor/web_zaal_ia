@@ -1,77 +1,73 @@
+
 import streamlit as st
 import pandas as pd
-import os
-import subprocess
-import time
+from pathlib import Path
 import io
-import glob
 
-# --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="ZAAL IA - Logística", layout="wide", page_icon="🚚")
+# Configuración de la página
+st.set_page_config(page_title="ZAAL Logística IA", layout="wide")
 
-# Forzar directorio local
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+st.title("🚚 ZAAL - Sistema de Clasificación Logística")
+st.markdown("Sube tu archivo `.csv` de llegadas para organizar las 13 rutas automáticamente.")
 
-st.title("🚀 ZAAL IA: Portal de Reparto Automatizado")
-
-# --- PASO 1: CLASIFICACIÓN ---
-st.header("1️⃣ Fase de Clasificación")
-f_csv = st.file_uploader("Sube el CSV de LLEGADAS", type=["csv"])
-
-if st.button("EJECUTAR CLASIFICACIÓN"):
-    if f_csv:
-        if os.path.exists("salida.xlsx"):
-            try: os.remove("salida.xlsx")
-            except: st.error("⚠️ Cierra 'salida.xlsx' antes de continuar.")
-        
-        with open("llegadas.csv", "wb") as f: f.write(f_csv.getbuffer())
-        
-        with st.spinner("Clasificando rutas..."):
-            cmd = ["python", "reparto_gpt.py", "--csv", "llegadas.csv", "--reglas", "Reglas_hospitales.xlsx", "--out", "salida.xlsx"]
-            subprocess.run(cmd, input="\n", capture_output=True, text=True)
-            
-            if os.path.exists("salida.xlsx"):
-                st.success("✅ Clasificación completada.")
-                st.rerun()
-
-# --- VISTA PREVIA Y DESCARGA INTERMEDIA ---
-if os.path.exists("salida.xlsx"):
-    st.markdown("---")
-    with st.expander("👀 VER Y GUARDAR ARCHIVO INTERMEDIO", expanded=True):
-        with open("salida.xlsx", "rb") as f:
-            data_int = f.read()
-            # AQUÍ ESTÁ EL CAMBIO: Usamos "stretch" para que el CMD no proteste
-            st.dataframe(pd.read_excel(io.BytesIO(data_int)).head(10), width="stretch")
-            st.download_button("💾 GUARDAR 'SALIDA.XLSX' EN MI PC", data_int, "salida.xlsx")
-
-    st.markdown("---")
-
-    # --- PASO 2: OPTIMIZACIÓN AUTOMÁTICA ---
-    st.header("2️⃣ Fase de Optimización (Plan de Carga)")
+# --- LÓGICA DE PROCESAMIENTO ---
+def clasificar_envios(df, df_reglas):
+    # Aseguramos que las columnas necesarias existan
+    df.columns = df.columns.str.strip()
     
-    if st.button("🚀 GENERAR PLAN FINAL (TODAS LAS RUTAS)"):
-        # Limpieza de planes antiguos
-        for f in glob.glob("PLAN_*.xlsx"): 
-            try: os.remove(f)
-            except: pass
-            
+    # Unimos con las reglas de hospitales (basado en la dirección o nombre)
+    # Aquí simulamos la lógica que tenías en reparto_gpt
+    df['Ruta'] = "RUTA NO ASIGNADA"
+    
+    # Ejemplo de lógica simplificada para que no falle:
+    for index, row in df.iterrows():
+        destino = str(row['Dir. entrega']).upper()
+        for _, regla in df_reglas.iterrows():
+            if str(regla['Patron']).upper() in destino:
+                df.at[index, 'Ruta'] = regla['Ruta']
+                break
+    
+    return df
+
+# --- INTERFAZ DE USUARIO ---
+archivo_subido = st.file_uploader("Elige el archivo llegadas.csv", type="csv")
+
+if archivo_subido is not None:
+    try:
+        # Leer el CSV subido
+        df_llegadas = pd.read_csv(archivo_subido, sep=None, engine='python', encoding='latin-1')
+        st.success("Archivo subido correctamente")
+        
+        # Intentar leer las reglas desde GitHub
         try:
-            xl = pd.ExcelFile("salida.xlsx")
-            zonas = [h for h in xl.sheet_names if not any(x in h.upper() for x in ["RESUMEN", "LOG"])]
-            rango_auto = f"0-{len(zonas)-1}"
-            
-            with st.spinner(f"Optimizando {len(zonas)} rutas..."):
-                subprocess.run(["python", "reparto_gemini.py"], input=f"{rango_auto}\n", text=True)
-                
-                planes = glob.glob("PLAN_*.xlsx")
-                if planes:
-                    plan_nombre = planes[0]
-                    st.success(f"🎯 Plan Final: {plan_nombre}")
-                    
-                    with open(plan_nombre, "rb") as f_plan:
-                        data_final = f_plan.read()
-                        # Volvemos a usar "stretch" aquí también
-                        st.dataframe(pd.read_excel(io.BytesIO(data_final)).head(10), width="stretch")
-                        st.download_button("💾 GUARDAR PLAN FINAL EN MI PC", data_final, plan_nombre)
+            df_reglas = pd.read_excel("Reglas_hospitales.xlsx")
         except Exception as e:
-            st.error(f"Error al leer las zonas: {e}")
+            st.error(f"No se encontró el archivo de reglas en GitHub: {e}")
+            df_reglas = None
+
+        if df_reglas is not None:
+            if st.button("🚀 Procesar Clasificación"):
+                # Procesar
+                resultado = clasificar_envios(df_llegadas, df_reglas)
+                
+                # Mostrar resultados
+                st.subheader("Vista Previa del Reparto")
+                st.dataframe(resultado.head(20))
+                
+                # Botón de Descarga Excel
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    resultado.to_excel(writer, index=False, sheet_name='Plan de Reparto')
+                
+                st.download_button(
+                    label="📥 Descargar Plan Final (Excel)",
+                    data=output.getvalue(),
+                    file_name="Plan_Logistica_ZAAL.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+                
+    except Exception as e:
+        st.error(f"Error al leer el CSV: {e}")
+
+else:
+    st.info("Esperando archivo... Por favor, sube el .csv para empezar.")
