@@ -16,43 +16,44 @@ archivo_subido = st.file_uploader("Sube el archivo llegadas.csv", type=["csv"])
 
 if archivo_subido:
     try:
-        # Leer archivos
+        # Leer el CSV de llegadas
         df_llegadas = pd.read_csv(archivo_subido, sep=None, engine='python', encoding='latin-1')
-        df_reglas = pd.read_excel(ruta_reglas, engine='openpyxl')
         
-        # Limpieza de nombres de columnas (quitar espacios invisibles)
+        # --- CAMBIO CLAVE AQUÍ ---
+        # Leemos específicamente la pestaña 'REGLAS_HOSPITALES'
+        df_reglas = pd.read_excel(ruta_reglas, sheet_name='REGLAS_HOSPITALES', engine='openpyxl')
+        
+        # Limpieza de nombres de columnas
         df_llegadas.columns = [c.strip() for c in df_llegadas.columns]
         df_reglas.columns = [c.strip() for c in df_reglas.columns]
         
         # Identificar las columnas clave
-        # En el CSV de llegadas buscamos algo que se parezca a 'Dir. entrega'
         col_dir_llegadas = next((c for c in df_llegadas.columns if 'DIR' in c.upper() or 'ENTREGA' in c.upper()), df_llegadas.columns[0])
-        
-        # En el Excel de reglas usamos el nombre que me has dado
         col_patron_reglas = 'Patrón_dirección'
-        col_ruta_reglas = 'Ruta' # Asegúrate de que en el Excel la columna de ruta se llame así
+        
+        # Buscamos la columna de Ruta (asegúrate de que se llame 'Ruta' en esa pestaña)
+        col_ruta_reglas = next((c for c in df_reglas.columns if 'RUTA' in c.upper()), 'Ruta')
 
         if st.button("🚀 Procesar Clasificación"):
             if col_patron_reglas not in df_reglas.columns:
-                st.error(f"❌ No encuentro la columna '{col_patron_reglas}' en el Excel. Las columnas que veo son: {list(df_reglas.columns)}")
+                st.error(f"❌ No encuentro '{col_patron_reglas}' en la pestaña REGLAS_HOSPITALES. Veo: {list(df_reglas.columns)}")
                 st.stop()
 
             df_llegadas['Ruta_Asignada'] = "SIN RUTA"
             
-            # Lógica de comparación
             for idx, fila in df_llegadas.iterrows():
                 direccion_cliente = str(fila[col_dir_llegadas]).upper().strip()
                 
                 for _, regla in df_reglas.iterrows():
                     palabra_clave = str(regla[col_patron_reglas]).upper().strip()
                     
-                    if palabra_clave and palabra_clave in direccion_cliente:
+                    if palabra_clave and palabra_clave != "NAN" and palabra_clave in direccion_cliente:
                         df_llegadas.at[idx, 'Ruta_Asignada'] = regla[col_ruta_reglas]
                         break
 
             # Resultados
             encontrados = len(df_llegadas[df_llegadas['Ruta_Asignada'] != "SIN RUTA"])
-            st.success(f"✅ ¡Hecho! Se han clasificado {encontrados} de {len(df_llegadas)} envíos.")
+            st.success(f"✅ ¡Hecho! Se han clasificado {encontrados} de {len(df_llegadas)} envíos usando la hoja REGLAS_HOSPITALES.")
             
             st.dataframe(df_llegadas)
 
