@@ -1,73 +1,75 @@
-
 import streamlit as st
 import pandas as pd
-from pathlib import Path
+import os
+import subprocess
+import sys
 import io
 
-# Configuración de la página
+# --- SOLUCIÓN DE LIBRERÍAS ---
+# Forzamos la instalación de openpyxl internamente para evitar el error de dependencias
+try:
+    import openpyxl
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "openpyxl"])
+
+# Configuración de página
 st.set_page_config(page_title="ZAAL Logística IA", layout="wide")
 
-st.title("🚚 ZAAL - Sistema de Clasificación Logística")
-st.markdown("Sube tu archivo `.csv` de llegadas para organizar las 13 rutas automáticamente.")
+st.title("🚚 ZAAL - Clasificador de Rutas Inteligente")
+st.info("Sube el archivo 'llegadas.csv' para procesar el reparto diario.")
 
-# --- LÓGICA DE PROCESAMIENTO ---
-def clasificar_envios(df, df_reglas):
-    # Aseguramos que las columnas necesarias existan
-    df.columns = df.columns.str.strip()
-    
-    # Unimos con las reglas de hospitales (basado en la dirección o nombre)
-    # Aquí simulamos la lógica que tenías en reparto_gpt
-    df['Ruta'] = "RUTA NO ASIGNADA"
-    
-    # Ejemplo de lógica simplificada para que no falle:
-    for index, row in df.iterrows():
-        destino = str(row['Dir. entrega']).upper()
-        for _, regla in df_reglas.iterrows():
-            if str(regla['Patron']).upper() in destino:
-                df.at[index, 'Ruta'] = regla['Ruta']
-                break
-    
-    return df
+# --- COMPROBACIÓN DEL EXCEL DE REGLAS ---
+# Buscamos el archivo en el repositorio
+ruta_reglas = "Reglas_hospitales.xlsx"
 
-# --- INTERFAZ DE USUARIO ---
-archivo_subido = st.file_uploader("Elige el archivo llegadas.csv", type="csv")
+if not os.path.exists(ruta_reglas):
+    st.error(f"❌ Error crítico: No se encuentra el archivo '{ruta_reglas}' en GitHub.")
+    st.stop()
+
+# --- INTERFAZ DE CARGA ---
+archivo_subido = st.file_uploader("Arrastra aquí tu archivo CSV", type=["csv"])
 
 if archivo_subido is not None:
     try:
-        # Leer el CSV subido
+        # 1. Leer el CSV con codificación flexible para evitar errores de caracteres
         df_llegadas = pd.read_csv(archivo_subido, sep=None, engine='python', encoding='latin-1')
-        st.success("Archivo subido correctamente")
+        st.success("✅ Archivo de llegadas cargado.")
+
+        # 2. Leer las reglas de Excel
+        df_reglas = pd.read_excel(ruta_reglas, engine='openpyxl')
         
-        # Intentar leer las reglas desde GitHub
-        try:
-            df_reglas = pd.read_excel("Reglas_hospitales.xlsx")
-        except Exception as e:
-            st.error(f"No se encontró el archivo de reglas en GitHub: {e}")
-            df_reglas = None
+        # Limpieza rápida de nombres de columnas
+        df_llegadas.columns = [str(c).strip() for c in df_llegadas.columns]
+        df_reglas.columns = [str(c).strip() for c in df_reglas.columns]
 
-        if df_reglas is not None:
-            if st.button("🚀 Procesar Clasificación"):
-                # Procesar
-                resultado = clasificar_envios(df_llegadas, df_reglas)
-                
-                # Mostrar resultados
-                st.subheader("Vista Previa del Reparto")
-                st.dataframe(resultado.head(20))
-                
-                # Botón de Descarga Excel
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    resultado.to_excel(writer, index=False, sheet_name='Plan de Reparto')
-                
-                st.download_button(
-                    label="📥 Descargar Plan Final (Excel)",
-                    data=output.getvalue(),
-                    file_name="Plan_Logistica_ZAAL.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-                
+        if st.button("🚀 Procesar Clasificación"):
+            # 3. Lógica de asignación de rutas
+            df_llegadas['Ruta'] = "SIN ASIGNAR"
+            
+            # Buscamos coincidencias en la dirección de entrega
+            for idx, fila in df_llegadas.iterrows():
+                direccion = str(fila.get('Dir. entrega', '')).upper()
+                for _, regla in df_reglas.iterrows():
+                    patron = str(regla.get('Patron', '')).upper()
+                    if patron in direccion and patron != "":
+                        df_llegadas.at[idx, 'Ruta'] = regla.get('Ruta', 'RUTA X')
+                        break
+
+            # 4. Mostrar Resultados
+            st.subheader("Vista Previa del Resultado")
+            st.dataframe(df_llegadas.head(15))
+
+            # 5. Generar Excel para descarga
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                df_llegadas.to_excel(writer, index=False, sheet_name='Plan_ZAAL')
+            
+            st.download_button(
+                label="📥 Descargar Plan de Reparto (Excel)",
+                data=buffer.getvalue(),
+                file_name="Resultado_Rutas_ZAAL.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
     except Exception as e:
-        st.error(f"Error al leer el CSV: {e}")
-
-else:
-    st.info("Esperando archivo... Por favor, sube el .csv para empezar.")
+        st.error(f"Hubo un problema al procesar los datos: {e}")
