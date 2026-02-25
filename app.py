@@ -11,10 +11,11 @@ import streamlit as st
 st.set_page_config(page_title="Reparto determinista", layout="wide")
 st.title("Reparto determinista (Streamlit)")
 
+# --- Paths en repo ---
 REPO_DIR = Path(__file__).resolve().parent
 SCRIPT_REPARTO = REPO_DIR / "reparto_gpt.py"
+SCRIPT_GEMINI = REPO_DIR / "reparto_gemini.py"
 REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
-
 
 # -------------------------
 # Utilidades
@@ -49,6 +50,17 @@ def run_cmd(cmd: list[str], cwd: Path) -> tuple[int, str, str]:
     return p.returncode, p.stdout, p.stderr
 
 
+def run_cmd_input(cmd: list[str], cwd: Path, stdin_text: str) -> tuple[int, str, str]:
+    p = subprocess.run(
+        cmd,
+        cwd=str(cwd),
+        input=stdin_text,
+        capture_output=True,
+        text=True,
+    )
+    return p.returncode, p.stdout, p.stderr
+
+
 def show_logs(stdout: str, stderr: str):
     if stdout.strip():
         st.subheader("STDOUT")
@@ -56,6 +68,10 @@ def show_logs(stdout: str, stderr: str):
     if stderr.strip():
         st.subheader("STDERR")
         st.code(stderr)
+
+
+def list_plan_files(workdir: Path) -> list[Path]:
+    return sorted(workdir.glob("PLAN_*.xlsx"), key=lambda x: x.stat().st_mtime, reverse=True)
 
 
 # -------------------------
@@ -68,13 +84,17 @@ with st.sidebar:
     st.write(f"Run: `{st.session_state.run_id}`")
     st.write(f"Workdir: `{workdir}`")
     st.write(f"Repo dir: `{REPO_DIR}`")
-    st.write(f"Script: `{SCRIPT_REPARTO}`")
-    st.write(f"Reglas: `{REGLAS_REPO}`")
-    st.write(f"Script exists: `{SCRIPT_REPARTO.exists()}`")
-    st.write(f"Reglas exists: `{REGLAS_REPO.exists()}`")
     st.write(f"Python: `{sys.executable}`")
 
-    # listado del repo para no discutir si está o no está
+    st.divider()
+    st.write(f"Script GPT: `{SCRIPT_REPARTO}`")
+    st.write(f"GPT exists: `{SCRIPT_REPARTO.exists()}`")
+    st.write(f"Script Gemini: `{SCRIPT_GEMINI}`")
+    st.write(f"Gemini exists: `{SCRIPT_GEMINI.exists()}`")
+    st.write(f"Reglas: `{REGLAS_REPO}`")
+    st.write(f"Reglas exists: `{REGLAS_REPO.exists()}`")
+
+    st.divider()
     try:
         st.write("Repo files:", sorted([p.name for p in REPO_DIR.iterdir()]))
     except Exception as e:
@@ -87,41 +107,38 @@ with st.sidebar:
 
 
 # -------------------------
-# Verificaciones duras
+# Verificaciones
 # -------------------------
+missing = []
 if not SCRIPT_REPARTO.exists():
-    st.error(
-        "No encuentro `reparto_gpt.py` en el repo DESPLEGADO.\n\n"
-        "Mira la sidebar: `Repo files`. Si no aparece, no está en la raíz o no se ha subido al branch desplegado.\n"
-        "Si está en subcarpeta, ajusta SCRIPT_REPARTO."
-    )
-    st.stop()
-
+    missing.append("reparto_gpt.py")
+if not SCRIPT_GEMINI.exists():
+    missing.append("reparto_gemini.py")
 if not REGLAS_REPO.exists():
+    missing.append("Reglas_hospitales.xlsx")
+
+if missing:
     st.error(
-        "No encuentro `Reglas_hospitales.xlsx` en el repo DESPLEGADO.\n\n"
-        "Súbelo al repo o ajusta REGLAS_REPO."
+        "Faltan archivos en el repo desplegado: " + ", ".join(missing) + "\n\n"
+        "Revisa que estén en el branch desplegado (main) y en la misma carpeta que app.py."
     )
     st.stop()
 
 st.divider()
 
 # -------------------------
-# Input (solo CSV)
+# Inputs
 # -------------------------
 st.subheader("1) Subir CSV de llegadas")
 csv_file = st.file_uploader("CSV de llegadas", type=["csv"])
 
-st.divider()
-
-# Preview opcional
 st.subheader("2) Previsualización (opcional, no afecta a ejecución)")
 col1, col2 = st.columns(2, gap="large")
 with col1:
-    sep = st.selectbox("Separador CSV", options=[";", ",", "TAB"], index=0)
+    sep = st.selectbox("Separador CSV (solo para vista previa)", options=[";", ",", "TAB"], index=0)
     sep_val = "\t" if sep == "TAB" else sep
 with col2:
-    encoding = st.selectbox("Encoding", options=["utf-8", "latin1", "cp1252"], index=0)
+    encoding = st.selectbox("Encoding (solo para vista previa)", options=["utf-8", "latin1", "cp1252"], index=0)
 
 preview_rows = st.slider("Filas de previsualización", 5, 50, 10)
 
@@ -131,13 +148,13 @@ if not csv_file:
     st.info("Sube el CSV para habilitar la ejecución.")
     st.stop()
 
-# Guardar CSV al workdir
+# Guardar CSV en workdir
 csv_path = save_upload(csv_file, workdir / "llegadas.csv")
 
-# Copiar reglas del repo al workdir (para que el script las encuentre fácil)
+# Copiar reglas del repo al workdir
 (workdir / "Reglas_hospitales.xlsx").write_bytes(REGLAS_REPO.read_bytes())
 
-# Preview CSV
+# Preview CSV (solo visual)
 try:
     df_prev = pd.read_csv(csv_path, sep=sep_val, encoding=encoding)
     st.dataframe(df_prev.head(preview_rows), use_container_width=True)
@@ -149,11 +166,11 @@ except Exception as e:
 st.divider()
 
 # -------------------------
-# Ejecución
+# Ejecución paso 1: reparto_gpt.py
 # -------------------------
-st.subheader("3) Ejecutar")
+st.subheader("3) Ejecutar reparto_gpt.py (genera salida.xlsx)")
+
 if st.button("Generar salida.xlsx", type="primary"):
-    # AQUÍ está la clave: str(SCRIPT_REPARTO) (ruta absoluta del repo), no "reparto_gpt.py"
     cmd = [
         sys.executable,
         str(SCRIPT_REPARTO),
@@ -161,9 +178,8 @@ if st.button("Generar salida.xlsx", type="primary"):
         "--reglas", "Reglas_hospitales.xlsx",
         "--out", "salida.xlsx",
     ]
-
     st.write("CMD:", cmd)
-    st.info("Ejecutando…")
+    st.info("Ejecutando reparto_gpt.py…")
 
     rc, out, err = run_cmd(cmd, cwd=workdir)
 
@@ -174,19 +190,18 @@ if st.button("Generar salida.xlsx", type="primary"):
 
     salida_path = workdir / "salida.xlsx"
     if not salida_path.exists():
-        st.error("El script terminó sin error, pero no encuentro `salida.xlsx` en el workdir.")
+        st.error("Terminó sin error, pero no encuentro `salida.xlsx` en el workdir.")
         show_logs(out, err)
         st.stop()
 
     st.success("✅ salida.xlsx generada")
 
-    # Preview Excel si se puede
+    # Preview salida.xlsx (si se puede)
     try:
         df_out = pd.read_excel(salida_path)
-        st.subheader("Vista previa de salida.xlsx")
         st.dataframe(df_out.head(preview_rows), use_container_width=True)
     except Exception:
-        st.warning("No he podido previsualizar el Excel, pero el archivo está generado.")
+        st.warning("No he podido previsualizar salida.xlsx, pero el archivo existe.")
 
     st.download_button(
         "Descargar salida.xlsx",
@@ -194,3 +209,78 @@ if st.button("Generar salida.xlsx", type="primary"):
         file_name="salida.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+st.divider()
+
+# -------------------------
+# Ejecución paso 2: reparto_gemini.py
+# -------------------------
+st.subheader("4) Ejecutar reparto_gemini.py (genera PLAN_*.xlsx)")
+st.caption("Este script lee `salida.xlsx` y pide la selección por stdin (ej: 0, 1, 3-5).")
+
+salida_exists = (workdir / "salida.xlsx").exists()
+if not salida_exists:
+    st.warning("Primero genera `salida.xlsx` con el paso 3.")
+else:
+    # Mostrar hojas e índices (mismo criterio de exclusión que usa el script)
+    try:
+        xl = pd.ExcelFile(workdir / "salida.xlsx")
+        hojas_disp = [
+            h for h in xl.sheet_names
+            if not any(x in h.upper() for x in ["VINAROZ", "MORELLA", "RESUMEN"])
+        ]
+        st.write("Rutas disponibles (índice → hoja):")
+        for i, h in enumerate(hojas_disp):
+            st.write(f"[{i}] {h}")
+    except Exception:
+        st.warning("No he podido listar hojas de salida.xlsx, pero puedes intentar ejecutar igualmente.")
+
+    seleccion = st.text_input("Selección (ej: 0, 1, 3-5)", value="0")
+
+    colA, colB = st.columns(2, gap="large")
+    with colA:
+        run_plan = st.button("Generar PLAN_*.xlsx", type="secondary")
+    with colB:
+        st.caption("Consejo: usa índices tal como aparecen arriba.")
+
+    if run_plan:
+        # Borramos planes anteriores para detectar el nuevo con seguridad
+        for f in workdir.glob("PLAN_*.xlsx"):
+            try:
+                f.unlink()
+            except Exception:
+                pass
+
+        cmd2 = [sys.executable, str(SCRIPT_GEMINI)]
+        st.write("CMD:", cmd2)
+        st.info("Ejecutando reparto_gemini.py…")
+
+        rc2, out2, err2 = run_cmd_input(cmd2, cwd=workdir, stdin_text=(seleccion.strip() + "\n"))
+
+        if rc2 != 0:
+            st.error("❌ Falló reparto_gemini.py")
+            show_logs(out2, err2)
+            st.stop()
+
+        planes = list_plan_files(workdir)
+        if not planes:
+            st.error("Terminó sin error, pero no encuentro PLAN_*.xlsx en el workdir.")
+            show_logs(out2, err2)
+            st.stop()
+
+        plan_path = planes[0]
+        st.success(f"✅ Generado: {plan_path.name}")
+
+        st.download_button(
+            f"Descargar {plan_path.name}",
+            data=plan_path.read_bytes(),
+            file_name=plan_path.name,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+        # Preview opcional
+        try:
+            df_plan = pd.read_excel(plan_path)
+            st.dataframe(df_plan.head(preview_rows), use_container_width=True)
+        except Exception:
+            st.warning("No he podido previsualizar el PLAN, pero el archivo está generado.")
