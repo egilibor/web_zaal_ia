@@ -5,24 +5,22 @@ import tempfile
 import subprocess
 import urllib.parse
 import time
+import re
 from pathlib import Path
 
 import streamlit as st
 import pandas as pd
 
-# --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="ZAAL IA - Logística", layout="wide", page_icon="🚚")
+# --- CONFIGURACIÓN ---
+st.set_page_config(page_title="ZAAL IA - Gestión de Reparto", layout="wide", page_icon="🚚")
 st.title("🚀 ZAAL IA: Portal de Reparto Automatizado")
 
-# --- PATHS EN REPOSITORIO ---
+# --- PATHS ---
 REPO_DIR = Path(__file__).resolve().parent
 SCRIPT_REPARTO = REPO_DIR / "reparto_gpt.py"
 SCRIPT_GEMINI = REPO_DIR / "reparto_gemini.py"
 REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
 
-# -------------------------
-# UTILIDADES
-# -------------------------
 def ensure_workdir() -> Path:
     if "workdir" not in st.session_state:
         st.session_state.workdir = Path(tempfile.mkdtemp(prefix="reparto_"))
@@ -38,25 +36,18 @@ def run_process(cmd: list[str], cwd: Path):
         p = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=600)
         return p.returncode, p.stdout, p.stderr
     except Exception as e:
-        return 1, "", f"Error de ejecución: {str(e)}"
+        return 1, "", str(e)
 
-# -------------------------
-# INICIALIZACIÓN
-# -------------------------
 workdir = ensure_workdir()
 
 with st.sidebar:
-    st.header("⚙️ Control")
-    if st.button("🔄 Reiniciar Aplicación"):
+    st.header("⚙️ Control de Sesión")
+    if st.button("🗑️ Reiniciar Todo"):
         shutil.rmtree(workdir, ignore_errors=True)
         for key in list(st.session_state.keys()): del st.session_state[key]
         st.rerun()
-    st.divider()
-    st.info(f"Sesión activa: {st.session_state.run_id}")
+    st.info(f"ID: {st.session_state.run_id}")
 
-# -------------------------
-# MENÚ
-# -------------------------
 opcion = st.selectbox("Operación:", ["1. Asignación de Reparto", "2. Google Maps (Rutas Móvil)"])
 st.divider()
 
@@ -64,7 +55,6 @@ st.divider()
 # 1) ASIGNACIÓN DE REPARTO
 # -------------------------
 if opcion == "1. Asignación de Reparto":
-    st.subheader("Clasificación y Optimización de Rutas")
     csv_file = st.file_uploader("Sube el CSV de llegadas", type=["csv"])
 
     if csv_file:
@@ -72,120 +62,95 @@ if opcion == "1. Asignación de Reparto":
         if REGLAS_REPO.exists():
             (workdir / "Reglas_hospitales.xlsx").write_bytes(REGLAS_REPO.read_bytes())
 
-        if st.button("🚀 INICIAR PROCESO COMPLETO", type="primary"):
+        if st.button("🚀 GENERAR PLAN COMPLETO", type="primary"):
             with st.status("Ejecutando motores de IA...", expanded=True) as status:
-                
-                # FASE 1: CLASIFICACIÓN
+                # FASE 1
                 st.write("⏳ Fase 1: Clasificando envíos...")
                 cmd_gpt = [sys.executable, str(SCRIPT_REPARTO), "--csv", "llegadas.csv", "--reglas", "Reglas_hospitales.xlsx", "--out", "salida.xlsx"]
                 rc1, out1, err1 = run_process(cmd_gpt, cwd=workdir)
                 
-                if rc1 != 0:
-                    status.update(label="❌ Error en Clasificación", state="error")
-                    st.error(err1)
-                else:
-                    # FASE 2: OPTIMIZACIÓN CON CONTEO SEGURO
-                    st.write("⏳ Fase 2: Sincronizando hojas...")
-                    time.sleep(1) 
-                    
+                if rc1 == 0:
+                    st.write("⏳ Fase 2: Optimizando rutas...")
                     try:
-                        temp_xl = pd.ExcelFile(workdir / "salida.xlsx")
-                        # MÉTODO BLINDADO: Solo contamos hojas que empiecen por ZREP, HOSPITAL o FEDERACION
-                        # Así ignoramos cualquier hoja de sistema o resumen que use Gemini
-                        hojas_reparto = [h for h in temp_xl.sheet_names if any(pref in h.upper() for pref in ["ZREP", "HOSPITAL", "FEDERACION"])]
+                        xl = pd.ExcelFile(workdir / "salida.xlsx")
+                        # Filtro más amplio para no dejar ninguna fuera (incluida la Ruta 9)
+                        hojas_a_procesar = [h for h in xl.sheet_names if not any(x in h.upper() for x in ["METADATOS", "RESUMEN_GENERAL", "RESUMEN", "LOG"])]
                         
-                        num_validas = len(hojas_reparto)
-                        # El índice debe ser 0..N-1. Si hay 17 hojas, el rango es 0-16.
-                        rango_seguro = f"0-{num_validas-1}"
+                        # Probamos con el rango máximo detectado
+                        rango = f"0-{len(hojas_a_procesar)-1}"
+                        st.write(f"📦 Rutas detectadas: {len(hojas_a_procesar)}. Procesando todas...")
                         
-                        st.write(f"📦 Hojas de reparto detectadas: {num_validas}")
-                        st.write(f"🚀 Enviando rango a Gemini: {rango_seguro}")
-                        
-                        cmd_gemini = [
-                            sys.executable, str(SCRIPT_GEMINI), 
-                            "--seleccion", rango_seguro, 
-                            "--in", "salida.xlsx", 
-                            "--out", "PLAN.xlsx"
-                        ]
+                        cmd_gemini = [sys.executable, str(SCRIPT_GEMINI), "--seleccion", rango, "--in", "salida.xlsx", "--out", "PLAN.xlsx"]
                         rc2, out2, err2 = run_process(cmd_gemini, cwd=workdir)
                         
-                        if rc2 != 0:
-                            # SI FALLA EL RANGO, REINTENTAMOS CON UN ÍNDICE MENOS (PARA EL ERROR DEL "17")
-                            st.write("⚠️ Ajustando rango por seguridad...")
-                            rango_ajustado = f"0-{num_validas-2}"
-                            cmd_gemini[2] = rango_ajustado
-                            rc2, out2, err2 = run_process(cmd_gemini, cwd=workdir)
-                            
-                        if rc2 != 0:
-                            status.update(label="❌ Error en Optimización", state="error")
-                            st.error(err2)
+                        # AUTO-CORRECCIÓN: Si Gemini dice que el rango es menor, lo ajustamos al vuelo
+                        if rc2 != 0 and "Rango válido" in err2:
+                            match = re.search(r"Rango válido: 0\.\.(\d+)", err2)
+                            if match:
+                                nuevo_rango = f"0-{match.group(1)}"
+                                st.write(f"🔄 Ajustando rango automáticamente a {nuevo_rango}...")
+                                cmd_gemini[2] = nuevo_rango
+                                rc2, out2, err2 = run_process(cmd_gemini, cwd=workdir)
+
+                        if rc2 == 0:
+                            status.update(label="✅ Plan generado correctamente", state="complete")
+                            st.success(f"Se han optimizado todas las rutas disponibles.")
                         else:
-                            status.update(label="✅ Todo completado con éxito", state="complete")
-                            st.success(f"Plan generado con {num_validas} rutas optimizadas.")
+                            status.update(label="❌ Error en Fase 2", state="error")
+                            st.error(err2)
                     except Exception as e:
-                        status.update(label="❌ Error de sincronización", state="error")
-                        st.error(f"Error técnico: {e}")
+                        st.error(f"Error de lectura: {e}")
+                else:
+                    status.update(label="❌ Error en Fase 1", state="error")
+                    st.error(err1)
 
     # Descargas
-    s_path, p_path = workdir / "salida.xlsx", workdir / "PLAN.xlsx"
-    if s_path.exists() or p_path.exists():
+    s_p, p_p = workdir / "salida.xlsx", workdir / "PLAN.xlsx"
+    if s_p.exists() or p_p.exists():
         st.markdown("### 📥 Descargas")
         c1, c2 = st.columns(2)
-        with c1:
-            if s_path.exists(): st.download_button("💾 DESCARGAR SALIDA.XLSX", s_path.read_bytes(), "salida.xlsx", use_container_width=True)
-        with c2:
-            if p_path.exists(): st.download_button("💾 DESCARGAR PLAN.XLSX", p_path.read_bytes(), "PLAN.xlsx", use_container_width=True)
+        if s_p.exists(): c1.download_button("💾 DESCARGAR SALIDA.XLSX", s_p.read_bytes(), "salida.xlsx", use_container_width=True)
+        if p_p.exists(): c2.download_button("💾 DESCARGAR PLAN.XLSX", p_p.read_bytes(), "PLAN.xlsx", use_container_width=True)
 
 # -------------------------
 # 2) GOOGLE MAPS
 # -------------------------
 elif opcion == "2. Google Maps (Rutas Móvil)":
     st.subheader("📍 Navegación (Origen: Vall d'Uxo)")
-    
-    f_user = st.file_uploader("Subir PLAN.xlsx manual", type=["xlsx"])
-    path_plan = save_upload(f_user, workdir / "temp_plan.xlsx") if f_user else (workdir / "PLAN.xlsx" if (workdir / "PLAN.xlsx").exists() else None)
+    f_user = st.file_uploader("Subir PLAN.xlsx (opcional)", type=["xlsx"])
+    p_path = save_upload(f_user, workdir / "temp_p.xlsx") if f_user else (workdir / "PLAN.xlsx" if (workdir / "PLAN.xlsx").exists() else None)
 
-    if path_plan:
-        try:
-            xl = pd.ExcelFile(path_plan)
-            # Mostramos todas las rutas reales
-            ignorar = ["METADATOS", "LOG", "INSTRUCCIONES", "RESUMEN_GENERAL", "RESUMEN"]
-            hojas = [h for h in xl.sheet_names if h.upper() not in ignorar]
+    if p_path:
+        xl = pd.ExcelFile(p_path)
+        # Mostrar absolutamente todas las hojas que no sean de sistema
+        ignorar = ["METADATOS", "LOG", "INSTRUCCIONES", "RESUMEN"]
+        hojas = [h for h in xl.sheet_names if not any(x in h.upper() for x in ignorar)]
+        
+        if hojas:
+            sel = st.selectbox("Selecciona la ruta (Asegúrate de ver la Ruta 9):", hojas)
+            df = pd.read_excel(p_path, sheet_name=sel)
             
-            if hojas:
-                sel = st.selectbox(f"Selecciona Ruta ({len(hojas)} totales):", hojas)
-                df = pd.read_excel(path_plan, sheet_name=sel)
-                
-                c_dir = next((c for c in df.columns if "DIR" in str(c).upper()), None)
-                c_pob = next((c for c in df.columns if "POB" in str(c).upper() or "LOC" in str(c).upper()), "")
+            c_dir = next((c for c in df.columns if "DIR" in str(c).upper()), None)
+            c_pob = next((c for c in df.columns if "POB" in str(c).upper() or "LOC" in str(c).upper()), "")
 
-                if c_dir:
-                    # CONFIGURACIÓN ORIGEN: Vall d'Uxo
-                    origen_fijo = "Vall d'Uxo, Castellon"
-                    origen_encoded = urllib.parse.quote(origen_fijo)
+            if c_dir:
+                # ORIGEN FIJO: Vall d'Uxo
+                origen_enc = urllib.parse.quote("Vall d'Uxo, Castellon")
+                # Limpiamos direcciones vacías
+                direcciones = [urllib.parse.quote(f"{f[c_dir]}, {f[c_pob]}".strip(", ")) for _, f in df.iterrows() if len(str(f[c_dir])) > 4]
+                
+                st.info(f"🚩 Ruta: {sel} | Total paradas: {len(direcciones)}")
+                
+                # Tramos de 9 paradas
+                for i in range(0, len(direcciones), 9):
+                    tramo = direcciones[i:i+9]
+                    # URL: origin=Vall d'Uxo & destination=Ultima parada del tramo & waypoints=Resto de paradas
+                    url_maps = f"https://www.google.com/maps/dir/?api=1&origin={origen_enc}&destination={tramo[-1]}"
+                    if len(tramo) > 1:
+                        url_maps += f"&waypoints={'|'.join(tramo[:-1])}"
                     
-                    direcciones = []
-                    for _, fila in df.iterrows():
-                        addr = f"{fila[c_dir]}, {fila[c_pob]}".strip(", ")
-                        if len(addr) > 5: direcciones.append(urllib.parse.quote(addr))
-                    
-                    st.info(f"🚩 Ruta: {sel} | Paradas: {len(direcciones)}")
-                    
-                    # Tramos de 9 paradas
-                    for i in range(0, len(direcciones), 9):
-                        t = direcciones[i:i+9]
-                        destino = t[-1]
-                        waypoints = t[:-1]
-                        
-                        # URL Profesional de Google Maps
-                        url = f"https://www.google.com/maps/dir/?api=1&origin={origen_encoded}&destination={destino}"
-                        if waypoints:
-                            url += f"&waypoints={'|'.join(waypoints)}"
-                        
-                        st.link_button(f"🚗 Abrir Tramo {i+1} a {i+len(t)}", url, use_container_width=True)
-                else:
-                    st.error("Columna 'Dirección' no encontrada.")
+                    st.link_button(f"🚗 Abrir Tramo: Paradas {i+1} a {i+len(tramo)}", url_maps, use_container_width=True)
             else:
-                st.warning("No hay rutas válidas.")
-        except Exception as e:
-            st.error(f"Error: {e}")
+                st.error("No se ha encontrado la columna de dirección en esta hoja.")
+        else:
+            st.warning("No se han detectado rutas en el archivo.")
