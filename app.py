@@ -28,143 +28,127 @@ def ensure_workdir() -> Path:
         st.session_state.run_id = str(uuid.uuid4())[:8]
     return st.session_state.workdir
 
-def reset_session_dir():
-    wd = st.session_state.get("workdir")
-    if wd and isinstance(wd, Path):
-        shutil.rmtree(wd, ignore_errors=True)
-    st.session_state.workdir = Path(tempfile.mkdtemp(prefix="reparto_"))
-    st.session_state.run_id = str(uuid.uuid4())[:8]
-
 def save_upload(uploaded_file, dst: Path) -> Path:
     dst.write_bytes(uploaded_file.getbuffer())
     return dst
 
-def run_process(cmd: list[str], cwd: Path, timeout_s: int = 300) -> tuple[int, str, str]:
+def run_process(cmd: list[str], cwd: Path) -> tuple[int, str, str]:
     try:
-        p = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=timeout_s)
+        p = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=300)
         return p.returncode, p.stdout, p.stderr
-    except subprocess.TimeoutExpired as e:
-        return 124, e.stdout or "", f"TIMEOUT tras {timeout_s}s"
-
-def show_logs(stdout: str, stderr: str):
-    if stdout.strip():
-        st.subheader("STDOUT")
-        st.code(stdout)
-    if stderr.strip():
-        st.subheader("STDERR")
-        st.code(stderr)
+    except Exception as e:
+        return 1, "", str(e)
 
 # -------------------------
-# ESTADO Y VERIFICACIONES
+# ESTADO
 # -------------------------
 workdir = ensure_workdir()
 
 with st.sidebar:
-    st.header("Estado del Sistema")
-    st.write(f"ID Sesión: `{st.session_state.run_id}`")
-    if st.button("Limpiar y Reiniciar"):
-        reset_session_dir()
+    st.header("Control de Sesión")
+    if st.button("Limpiar todo y empezar de cero"):
+        shutil.rmtree(workdir, ignore_errors=True)
+        for key in list(st.session_state.keys()): del st.session_state[key]
         st.rerun()
     st.divider()
-    st.write(f"Motor GPT: {'✅' if SCRIPT_REPARTO.exists() else '❌'}")
-    st.write(f"Motor Gemini: {'✅' if SCRIPT_GEMINI.exists() else '❌'}")
-    st.write(f"Reglas: {'✅' if REGLAS_REPO.exists() else '❌'}")
+    st.write(f"ID: `{st.session_state.run_id}`")
 
 # -------------------------
 # MENÚ PRINCIPAL
 # -------------------------
-opcion = st.selectbox("Seleccione operación:", ["Asignación de Reparto", "Google Maps (Rutas Móvil)"])
+opcion = st.selectbox("Menú de Operaciones:", ["Asignación de Reparto", "Google Maps (Rutas Móvil)"])
 st.divider()
 
 # -------------------------
 # 1) ASIGNACIÓN DE REPARTO
 # -------------------------
 if opcion == "Asignación de Reparto":
-    st.subheader("Generar Nuevo Plan")
-    csv_file = st.file_uploader("Subir CSV de llegadas", type=["csv"])
+    st.subheader("Generar Clasificación y Plan de Carga")
+    csv_file = st.file_uploader("Sube el CSV de llegadas", type=["csv"])
 
     if csv_file:
         save_upload(csv_file, workdir / "llegadas.csv")
         (workdir / "Reglas_hospitales.xlsx").write_bytes(REGLAS_REPO.read_bytes())
 
-        if st.button("Ejecutar Procesamiento Completo", type="primary"):
+        if st.button("🚀 EJECUTAR PROCESO COMPLETO", type="primary"):
             # Fase 1: Clasificación
             cmd_gpt = [sys.executable, str(SCRIPT_REPARTO), "--csv", "llegadas.csv", "--reglas", "Reglas_hospitales.xlsx", "--out", "salida.xlsx"]
-            with st.spinner("Clasificando..."):
-                rc, out, err = run_process(cmd_gpt, cwd=workdir)
+            with st.spinner("Procesando clasificación (GPT)..."):
+                rc1, out1, err1 = run_process(cmd_gpt, cwd=workdir)
             
-            if rc == 0:
+            if rc1 == 0:
                 # Fase 2: Optimización
                 cmd_gemini = [sys.executable, str(SCRIPT_GEMINI), "--seleccion", "1-9", "--in", "salida.xlsx", "--out", "PLAN.xlsx"]
-                with st.spinner("Optimizando..."):
+                with st.spinner("Procesando optimización (Gemini)..."):
                     rc2, out2, err2 = run_process(cmd_gemini, cwd=workdir)
                 
                 if rc2 == 0:
-                    st.success("✅ ¡Plan generado!")
-                    st.session_state.plan_listo = True
+                    st.success("✅ ¡Archivos generados con éxito!")
                 else:
-                    st.error("Error en optimización"); show_logs(out2, err2)
+                    st.error("Falló la optimización."); st.code(err2)
             else:
-                st.error("Error en clasificación"); show_logs(out, err)
+                st.error("Falló la clasificación."); st.code(err1)
 
-    # Descargas
-    plan_path = workdir / "PLAN.xlsx"
-    if plan_path.exists():
-        st.download_button("💾 DESCARGAR PLAN.XLSX", plan_path.read_bytes(), "PLAN.xlsx")
+    # --- DESCARGAS (Siempre visibles si el archivo existe) ---
+    st.markdown("### 📥 Archivos Disponibles")
+    col1, col2 = st.columns(2)
+    
+    salida_p = workdir / "salida.xlsx"
+    plan_p = workdir / "PLAN.xlsx"
+
+    with col1:
+        if salida_p.exists():
+            st.download_button("💾 DESCARGAR SALIDA.XLSX", salida_p.read_bytes(), "salida.xlsx", use_container_width=True)
+        else:
+            st.info("Salida.xlsx pendiente")
+            
+    with col2:
+        if plan_p.exists():
+            st.download_button("💾 DESCARGAR PLAN.XLSX", plan_p.read_bytes(), "PLAN.xlsx", use_container_width=True)
+        else:
+            st.info("PLAN.xlsx pendiente")
 
 # -------------------------
-# 2) GOOGLE MAPS (RUTAS MÓVIL)
+# 2) GOOGLE MAPS
 # -------------------------
 elif opcion == "Google Maps (Rutas Móvil)":
-    st.subheader("📍 Navegación por Tramos")
+    st.subheader("📍 Generar Enlaces para el Chófer")
     
-    # NUEVO: Pedir el fichero directamente
-    f_plan_user = st.file_uploader("Subir archivo PLAN.xlsx optimizado", type=["xlsx"], help="Sube el archivo generado previamente para crear los enlaces de Maps")
-
-    # Decidir qué archivo usar: el subido o el que esté en el workdir
-    plan_source = None
-    if f_plan_user:
-        plan_source = f_plan_user
+    # Opción de subir archivo manualmente
+    f_user = st.file_uploader("Sube un archivo PLAN.xlsx para extraer rutas", type=["xlsx"])
+    
+    # Si no sube nada, intentamos usar el de la sesión
+    path_plan = None
+    if f_user:
+        path_plan = save_upload(f_user, workdir / "temp_plan.xlsx")
     elif (workdir / "PLAN.xlsx").exists():
-        plan_source = workdir / "PLAN.xlsx"
-        st.info("Utilizando el Plan generado en la sesión actual.")
+        path_plan = workdir / "PLAN.xlsx"
+        st.success("Cargado PLAN.xlsx de la sesión actual.")
 
-    if plan_source:
+    if path_plan:
         try:
-            xl = pd.ExcelFile(plan_source)
-            hojas_zrep = [h for h in xl.sheet_names if "ZREP" in h.upper()]
-
-            if hojas_zrep:
-                ruta_sel = st.selectbox("Selecciona la ruta (ZREP):", hojas_zrep)
-                df = pd.read_excel(plan_source, sheet_name=ruta_sel)
+            xl = pd.ExcelFile(path_plan)
+            hojas = [h for h in xl.sheet_names if "ZREP" in h.upper()]
+            
+            if hojas:
+                sel = st.selectbox("Selecciona la ZREP:", hojas)
+                df = pd.read_excel(path_plan, sheet_name=sel)
                 
-                col_dir = next((c for c in df.columns if "DIREC" in c.upper()), None)
-                col_pob = next((c for c in df.columns if "POB" in c.upper()), "")
+                c_dir = next((c for c in df.columns if "DIREC" in c.upper()), None)
+                c_pob = next((c for c in df.columns if "POB" in c.upper()), "")
 
-                if col_dir:
-                    direcciones = []
-                    for _, fila in df.iterrows():
-                        addr = f"{fila[col_dir]}, {fila[col_pob]}".strip(", ")
-                        direcciones.append(urllib.parse.quote(addr))
-
-                    st.success(f"Ruta: {ruta_sel} | {len(direcciones)} paradas detectadas.")
+                if c_dir:
+                    urls = [urllib.parse.quote(f"{f[c_dir]}, {f[c_pob]}".strip(", ")) for _, f in df.iterrows()]
                     
-                    # Generar botones por tramos
-                    for i in range(0, len(direcciones), 9):
-                        tramos = direcciones[i : i + 9]
-                        destino = tramos[-1]
-                        waypoints = tramos[:-1]
-                        
-                        url = f"https://www.google.com/maps/dir/?api=1&destination={destino}"
-                        if waypoints:
-                            url += f"&waypoints={'|'.join(waypoints)}"
-                        
-                        st.link_button(f"🗺️ Tramo {i+1} - {i+len(tramos)}", url, use_container_width=True)
+                    st.write(f"**Total paradas: {len(urls)}**")
+                    for i in range(0, len(urls), 9):
+                        t = urls[i:i+9]
+                        # URL oficial de navegación
+                        link = f"https://www.google.com/maps/dir/?api=1&destination={t[-1]}&waypoints={'|'.join(t[:-1])}"
+                        st.link_button(f"🗺️ Tramo {i+1} a {i+len(t)}", link, use_container_width=True)
                 else:
-                    st.error("No se encontró la columna de dirección.")
+                    st.error("No hay columna de dirección.")
             else:
-                st.warning("El archivo no contiene pestañas de ruta (ZREP).")
+                st.warning("No hay hojas ZREP en este archivo.")
         except Exception as e:
-            st.error(f"Error al leer el archivo: {e}")
-    else:
-        st.info("Sube un archivo `PLAN.xlsx` para generar los tramos de navegación.")
+            st.error(f"Error: {e}")
