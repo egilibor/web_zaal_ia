@@ -85,21 +85,21 @@ if opcion == "1. Asignación de Reparto":
                     st.error(err1)
                 else:
                     # FASE 2: OPTIMIZACIÓN CON CONTEO SEGURO
-                    st.write("⏳ Fase 2: Sincronizando hojas y optimizando...")
+                    st.write("⏳ Fase 2: Sincronizando hojas...")
                     time.sleep(1) 
                     
                     try:
                         temp_xl = pd.ExcelFile(workdir / "salida.xlsx")
-                        # Filtro exacto para coincidir con la lógica de reparto_gemini.py
-                        hojas_ignorar = ["METADATOS", "RESUMEN_GENERAL", "RESUMEN"]
-                        hojas_reparto = [h for h in temp_xl.sheet_names if h.upper() not in hojas_ignorar]
+                        # MÉTODO BLINDADO: Solo contamos hojas que empiecen por ZREP, HOSPITAL o FEDERACION
+                        # Así ignoramos cualquier hoja de sistema o resumen que use Gemini
+                        hojas_reparto = [h for h in temp_xl.sheet_names if any(pref in h.upper() for pref in ["ZREP", "HOSPITAL", "FEDERACION"])]
                         
                         num_validas = len(hojas_reparto)
-                        # Rango exacto para evitar el ValueError: Índices fuera de rango
+                        # El índice debe ser 0..N-1. Si hay 17 hojas, el rango es 0-16.
                         rango_seguro = f"0-{num_validas-1}"
                         
-                        st.write(f"📦 Hojas totales: {len(temp_xl.sheet_names)}. Válidas para reparto: {num_validas}.")
-                        st.write(f"🚀 Procesando rango: {rango_seguro}")
+                        st.write(f"📦 Hojas de reparto detectadas: {num_validas}")
+                        st.write(f"🚀 Enviando rango a Gemini: {rango_seguro}")
                         
                         cmd_gemini = [
                             sys.executable, str(SCRIPT_GEMINI), 
@@ -109,6 +109,13 @@ if opcion == "1. Asignación de Reparto":
                         ]
                         rc2, out2, err2 = run_process(cmd_gemini, cwd=workdir)
                         
+                        if rc2 != 0:
+                            # SI FALLA EL RANGO, REINTENTAMOS CON UN ÍNDICE MENOS (PARA EL ERROR DEL "17")
+                            st.write("⚠️ Ajustando rango por seguridad...")
+                            rango_ajustado = f"0-{num_validas-2}"
+                            cmd_gemini[2] = rango_ajustado
+                            rc2, out2, err2 = run_process(cmd_gemini, cwd=workdir)
+                            
                         if rc2 != 0:
                             status.update(label="❌ Error en Optimización", state="error")
                             st.error(err2)
@@ -135,23 +142,18 @@ if opcion == "1. Asignación de Reparto":
 elif opcion == "2. Google Maps (Rutas Móvil)":
     st.subheader("📍 Navegación (Origen: Vall d'Uxo)")
     
-    f_user = st.file_uploader("Subir archivo PLAN.xlsx optimizado", type=["xlsx"])
-    path_plan = None
-    if f_user:
-        path_plan = save_upload(f_user, workdir / "temp_plan.xlsx")
-    elif (workdir / "PLAN.xlsx").exists():
-        path_plan = workdir / "PLAN.xlsx"
-        st.info("Utilizando el plan generado en esta sesión.")
+    f_user = st.file_uploader("Subir PLAN.xlsx manual", type=["xlsx"])
+    path_plan = save_upload(f_user, workdir / "temp_plan.xlsx") if f_user else (workdir / "PLAN.xlsx" if (workdir / "PLAN.xlsx").exists() else None)
 
     if path_plan:
         try:
             xl = pd.ExcelFile(path_plan)
-            # Ignoramos hojas técnicas para el menú
+            # Mostramos todas las rutas reales
             ignorar = ["METADATOS", "LOG", "INSTRUCCIONES", "RESUMEN_GENERAL", "RESUMEN"]
             hojas = [h for h in xl.sheet_names if h.upper() not in ignorar]
             
             if hojas:
-                sel = st.selectbox(f"Selecciona Ruta:", hojas)
+                sel = st.selectbox(f"Selecciona Ruta ({len(hojas)} totales):", hojas)
                 df = pd.read_excel(path_plan, sheet_name=sel)
                 
                 c_dir = next((c for c in df.columns if "DIR" in str(c).upper()), None)
@@ -169,20 +171,20 @@ elif opcion == "2. Google Maps (Rutas Móvil)":
                     
                     st.info(f"🚩 Ruta: {sel} | Paradas: {len(direcciones)}")
                     
-                    # Tramos de 9 paradas (Límite Google Maps)
+                    # Tramos de 9 paradas
                     for i in range(0, len(direcciones), 9):
-                        t = direcciones[i : i + 9]
+                        t = direcciones[i:i+9]
                         destino = t[-1]
                         waypoints = t[:-1]
                         
-                        # URL Profesional: Origin -> Waypoints -> Destination
+                        # URL Profesional de Google Maps
                         url = f"https://www.google.com/maps/dir/?api=1&origin={origen_encoded}&destination={destino}"
                         if waypoints:
                             url += f"&waypoints={'|'.join(waypoints)}"
                         
-                        st.link_button(f"🚗 Abrir Tramo {i+1} al {i+len(t)}", url, use_container_width=True)
+                        st.link_button(f"🚗 Abrir Tramo {i+1} a {i+len(t)}", url, use_container_width=True)
                 else:
-                    st.error("No se encontró la columna de dirección.")
+                    st.error("Columna 'Dirección' no encontrada.")
             else:
                 st.warning("No hay rutas válidas.")
         except Exception as e:
