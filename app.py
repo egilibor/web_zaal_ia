@@ -85,22 +85,21 @@ if opcion == "1. Asignación de Reparto":
                     st.error(err1)
                 else:
                     # FASE 2: OPTIMIZACIÓN CON CONTEO SEGURO
-                    st.write("⏳ Fase 2: Sincronizando hojas para optimización...")
+                    st.write("⏳ Fase 2: Sincronizando hojas y optimizando...")
                     time.sleep(1) 
                     
                     try:
                         temp_xl = pd.ExcelFile(workdir / "salida.xlsx")
-                        # Filtro exacto para coincidir con la lógica interna de reparto_gemini.py
-                        hojas_validas = [h for h in temp_xl.sheet_names if any(x in h.upper() for x in ["ZREP", "HOSPITALES", "FEDERACION"])]
+                        # Filtro exacto para coincidir con la lógica de reparto_gemini.py
+                        hojas_ignorar = ["METADATOS", "RESUMEN_GENERAL", "RESUMEN"]
+                        hojas_reparto = [h for h in temp_xl.sheet_names if h.upper() not in hojas_ignorar]
                         
-                        num_validas = len(hojas_validas)
-                        if num_validas == 0:
-                            st.warning("No se detectaron hojas de ruta válidas (ZREP/HOSPITALES/FEDERACION).")
-                            rango_seguro = "0-0"
-                        else:
-                            rango_seguro = f"0-{num_validas-1}"
+                        num_validas = len(hojas_reparto)
+                        # Rango exacto para evitar el ValueError: Índices fuera de rango
+                        rango_seguro = f"0-{num_validas-1}"
                         
-                        st.write(f"📦 Hojas de reparto encontradas: {num_validas}. Rango asignado: {rango_seguro}")
+                        st.write(f"📦 Hojas totales: {len(temp_xl.sheet_names)}. Válidas para reparto: {num_validas}.")
+                        st.write(f"🚀 Procesando rango: {rango_seguro}")
                         
                         cmd_gemini = [
                             sys.executable, str(SCRIPT_GEMINI), 
@@ -117,7 +116,7 @@ if opcion == "1. Asignación de Reparto":
                             status.update(label="✅ Todo completado con éxito", state="complete")
                             st.success(f"Plan generado con {num_validas} rutas optimizadas.")
                     except Exception as e:
-                        status.update(label="❌ Error de cálculo de rango", state="error")
+                        status.update(label="❌ Error de sincronización", state="error")
                         st.error(f"Error técnico: {e}")
 
     # Descargas
@@ -134,9 +133,9 @@ if opcion == "1. Asignación de Reparto":
 # 2) GOOGLE MAPS
 # -------------------------
 elif opcion == "2. Google Maps (Rutas Móvil)":
-    st.subheader("📍 Navegación (Origen Fijo: Vall d'Uxo)")
+    st.subheader("📍 Navegación (Origen: Vall d'Uxo)")
     
-    f_user = st.file_uploader("Subir PLAN.xlsx optimizado", type=["xlsx"])
+    f_user = st.file_uploader("Subir archivo PLAN.xlsx optimizado", type=["xlsx"])
     path_plan = None
     if f_user:
         path_plan = save_upload(f_user, workdir / "temp_plan.xlsx")
@@ -147,7 +146,7 @@ elif opcion == "2. Google Maps (Rutas Móvil)":
     if path_plan:
         try:
             xl = pd.ExcelFile(path_plan)
-            # Mostrar solo hojas de ruta reales
+            # Ignoramos hojas técnicas para el menú
             ignorar = ["METADATOS", "LOG", "INSTRUCCIONES", "RESUMEN_GENERAL", "RESUMEN"]
             hojas = [h for h in xl.sheet_names if h.upper() not in ignorar]
             
@@ -170,21 +169,20 @@ elif opcion == "2. Google Maps (Rutas Móvil)":
                     
                     st.info(f"🚩 Ruta: {sel} | Paradas: {len(direcciones)}")
                     
-                    # Generar tramos de 9 paradas
+                    # Tramos de 9 paradas (Límite Google Maps)
                     for i in range(0, len(direcciones), 9):
-                        t = direcciones[i:i+9]
+                        t = direcciones[i : i + 9]
                         destino = t[-1]
                         waypoints = t[:-1]
                         
-                        # URL oficial de navegación (API=1)
-                        # Origen -> Waypoints -> Destino
-                        link = f"https://www.google.com/maps/dir/?api=1&origin={origen_encoded}&destination={destino}"
+                        # URL Profesional: Origin -> Waypoints -> Destination
+                        url = f"https://www.google.com/maps/dir/?api=1&origin={origen_encoded}&destination={destino}"
                         if waypoints:
-                            link += f"&waypoints={'|'.join(waypoints)}"
+                            url += f"&waypoints={'|'.join(waypoints)}"
                         
-                        st.link_button(f"🚗 Abrir Tramo {i+1} a {i+len(t)}", link, use_container_width=True)
+                        st.link_button(f"🚗 Abrir Tramo {i+1} al {i+len(t)}", url, use_container_width=True)
                 else:
-                    st.error("Columna de dirección no encontrada en la hoja.")
+                    st.error("No se encontró la columna de dirección.")
             else:
                 st.warning("No hay rutas válidas.")
         except Exception as e:
