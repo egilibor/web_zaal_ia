@@ -84,22 +84,23 @@ if opcion == "1. Asignación de Reparto":
                     status.update(label="❌ Error en Clasificación", state="error")
                     st.error(err1)
                 else:
-                    # FASE 2: OPTIMIZACIÓN DINÁMICA
-                    st.write("⏳ Fase 2: Sincronizando hojas y optimizando...")
+                    # FASE 2: OPTIMIZACIÓN CON CONTEO SEGURO
+                    st.write("⏳ Fase 2: Sincronizando hojas para optimización...")
                     time.sleep(1) 
                     
                     try:
-                        # LEER EL ARCHIVO PARA CALCULAR EL RANGO QUE ENTIENDE GEMINI
                         temp_xl = pd.ExcelFile(workdir / "salida.xlsx")
-                        # Filtramos las hojas que el motor de Gemini ignora internamente
-                        hojas_ignorar = ["METADATOS", "RESUMEN_GENERAL", "RESUMEN", "LOG"]
-                        hojas_reparto = [h for h in temp_xl.sheet_names if h.upper() not in hojas_ignorar]
+                        # Filtro exacto para coincidir con la lógica interna de reparto_gemini.py
+                        hojas_validas = [h for h in temp_xl.sheet_names if any(x in h.upper() for x in ["ZREP", "HOSPITALES", "FEDERACION"])]
                         
-                        num_validas = len(hojas_reparto)
-                        rango_seguro = f"0-{num_validas-1}"
+                        num_validas = len(hojas_validas)
+                        if num_validas == 0:
+                            st.warning("No se detectaron hojas de ruta válidas (ZREP/HOSPITALES/FEDERACION).")
+                            rango_seguro = "0-0"
+                        else:
+                            rango_seguro = f"0-{num_validas-1}"
                         
-                        st.write(f"📦 Total hojas: {len(temp_xl.sheet_names)}. Hojas de reparto detectadas: {num_validas}.")
-                        st.write(f"🚀 Enviando comando de optimización para rango: {rango_seguro}")
+                        st.write(f"📦 Hojas de reparto encontradas: {num_validas}. Rango asignado: {rango_seguro}")
                         
                         cmd_gemini = [
                             sys.executable, str(SCRIPT_GEMINI), 
@@ -116,8 +117,8 @@ if opcion == "1. Asignación de Reparto":
                             status.update(label="✅ Todo completado con éxito", state="complete")
                             st.success(f"Plan generado con {num_validas} rutas optimizadas.")
                     except Exception as e:
-                        status.update(label="❌ Error de sincronización", state="error")
-                        st.error(f"No se pudo calcular el rango dinámico: {e}")
+                        status.update(label="❌ Error de cálculo de rango", state="error")
+                        st.error(f"Error técnico: {e}")
 
     # Descargas
     s_path, p_path = workdir / "salida.xlsx", workdir / "PLAN.xlsx"
@@ -125,32 +126,33 @@ if opcion == "1. Asignación de Reparto":
         st.markdown("### 📥 Descargas")
         c1, c2 = st.columns(2)
         with c1:
-            if s_path.exists(): st.download_button("💾 SALIDA.XLSX", s_path.read_bytes(), "salida.xlsx", use_container_width=True)
+            if s_path.exists(): st.download_button("💾 DESCARGAR SALIDA.XLSX", s_path.read_bytes(), "salida.xlsx", use_container_width=True)
         with c2:
-            if p_path.exists(): st.download_button("💾 PLAN.XLSX", p_path.read_bytes(), "PLAN.xlsx", use_container_width=True)
+            if p_path.exists(): st.download_button("💾 DESCARGAR PLAN.XLSX", p_path.read_bytes(), "PLAN.xlsx", use_container_width=True)
 
 # -------------------------
 # 2) GOOGLE MAPS
 # -------------------------
 elif opcion == "2. Google Maps (Rutas Móvil)":
-    st.subheader("📍 Navegación (Origen: Vall d'Uxo)")
+    st.subheader("📍 Navegación (Origen Fijo: Vall d'Uxo)")
     
-    f_user = st.file_uploader("Subir PLAN.xlsx manual", type=["xlsx"])
+    f_user = st.file_uploader("Subir PLAN.xlsx optimizado", type=["xlsx"])
     path_plan = None
     if f_user:
         path_plan = save_upload(f_user, workdir / "temp_plan.xlsx")
     elif (workdir / "PLAN.xlsx").exists():
         path_plan = workdir / "PLAN.xlsx"
-        st.info("Utilizando el plan de la sesión actual.")
+        st.info("Utilizando el plan generado en esta sesión.")
 
     if path_plan:
         try:
             xl = pd.ExcelFile(path_plan)
+            # Mostrar solo hojas de ruta reales
             ignorar = ["METADATOS", "LOG", "INSTRUCCIONES", "RESUMEN_GENERAL", "RESUMEN"]
             hojas = [h for h in xl.sheet_names if h.upper() not in ignorar]
             
             if hojas:
-                sel = st.selectbox(f"Selecciona Ruta ({len(hojas)} totales):", hojas)
+                sel = st.selectbox(f"Selecciona Ruta:", hojas)
                 df = pd.read_excel(path_plan, sheet_name=sel)
                 
                 c_dir = next((c for c in df.columns if "DIR" in str(c).upper()), None)
@@ -174,14 +176,15 @@ elif opcion == "2. Google Maps (Rutas Móvil)":
                         destino = t[-1]
                         waypoints = t[:-1]
                         
-                        # URL PROFESIONAL: Origen fijo -> Puntos intermedios -> Destino
-                        url = f"https://www.google.com/maps/dir/?api=1&origin={origen_encoded}&destination={destino}"
+                        # URL oficial de navegación (API=1)
+                        # Origen -> Waypoints -> Destino
+                        link = f"https://www.google.com/maps/dir/?api=1&origin={origen_encoded}&destination={destino}"
                         if waypoints:
-                            url += f"&waypoints={'|'.join(waypoints)}"
+                            link += f"&waypoints={'|'.join(waypoints)}"
                         
-                        st.link_button(f"🚗 Abrir Tramo {i+1} a {i+len(t)}", url, use_container_width=True)
+                        st.link_button(f"🚗 Abrir Tramo {i+1} a {i+len(t)}", link, use_container_width=True)
                 else:
-                    st.error("Columna 'Dirección' no encontrada.")
+                    st.error("Columna de dirección no encontrada en la hoja.")
             else:
                 st.warning("No hay rutas válidas.")
         except Exception as e:
