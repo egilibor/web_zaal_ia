@@ -35,7 +35,6 @@ def save_upload(uploaded_file, dst: Path) -> Path:
 
 def run_process(cmd: list[str], cwd: Path):
     try:
-        # Aumentamos el timeout a 10 minutos por seguridad
         p = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=600)
         return p.returncode, p.stdout, p.stderr
     except Exception as e:
@@ -53,7 +52,7 @@ with st.sidebar:
         for key in list(st.session_state.keys()): del st.session_state[key]
         st.rerun()
     st.divider()
-    st.info(f"ID Sesión: {st.session_state.run_id}")
+    st.info(f"Sesión activa: {st.session_state.run_id}")
 
 # -------------------------
 # MENÚ
@@ -86,17 +85,21 @@ if opcion == "1. Asignación de Reparto":
                     st.error(err1)
                 else:
                     # FASE 2: OPTIMIZACIÓN DINÁMICA
-                    st.write("⏳ Fase 2: Calculando rango y optimizando rutas...")
-                    time.sleep(1) # Pausa técnica para asegurar escritura del archivo
+                    st.write("⏳ Fase 2: Sincronizando hojas y optimizando...")
+                    time.sleep(1) 
                     
                     try:
-                        # Leemos el archivo generado para saber cuántas hojas tiene exactamente
+                        # LEER EL ARCHIVO PARA CALCULAR EL RANGO QUE ENTIENDE GEMINI
                         temp_xl = pd.ExcelFile(workdir / "salida.xlsx")
-                        hojas_reales = temp_xl.sheet_names
-                        total_hojas = len(hojas_reales)
-                        # El rango DEBE ser exacto para evitar el ValueError
-                        rango_seguro = f"0-{total_hojas-1}"
-                        st.write(f"📦 Detectadas {total_hojas} hojas. Procesando rango {rango_seguro}...")
+                        # Filtramos las hojas que el motor de Gemini ignora internamente
+                        hojas_ignorar = ["METADATOS", "RESUMEN_GENERAL", "RESUMEN", "LOG"]
+                        hojas_reparto = [h for h in temp_xl.sheet_names if h.upper() not in hojas_ignorar]
+                        
+                        num_validas = len(hojas_reparto)
+                        rango_seguro = f"0-{num_validas-1}"
+                        
+                        st.write(f"📦 Total hojas: {len(temp_xl.sheet_names)}. Hojas de reparto detectadas: {num_validas}.")
+                        st.write(f"🚀 Enviando comando de optimización para rango: {rango_seguro}")
                         
                         cmd_gemini = [
                             sys.executable, str(SCRIPT_GEMINI), 
@@ -111,10 +114,10 @@ if opcion == "1. Asignación de Reparto":
                             st.error(err2)
                         else:
                             status.update(label="✅ Todo completado con éxito", state="complete")
-                            st.success(f"Plan generado con {total_hojas} rutas optimizadas.")
+                            st.success(f"Plan generado con {num_validas} rutas optimizadas.")
                     except Exception as e:
-                        status.update(label="❌ Error al leer salida.xlsx", state="error")
-                        st.error(f"No se pudo calcular el rango: {e}")
+                        status.update(label="❌ Error de sincronización", state="error")
+                        st.error(f"No se pudo calcular el rango dinámico: {e}")
 
     # Descargas
     s_path, p_path = workdir / "salida.xlsx", workdir / "PLAN.xlsx"
@@ -122,9 +125,9 @@ if opcion == "1. Asignación de Reparto":
         st.markdown("### 📥 Descargas")
         c1, c2 = st.columns(2)
         with c1:
-            if s_path.exists(): st.download_button("💾 DESCARGAR SALIDA.XLSX", s_path.read_bytes(), "salida.xlsx", use_container_width=True)
+            if s_path.exists(): st.download_button("💾 SALIDA.XLSX", s_path.read_bytes(), "salida.xlsx", use_container_width=True)
         with c2:
-            if p_path.exists(): st.download_button("💾 DESCARGAR PLAN.XLSX", p_path.read_bytes(), "PLAN.xlsx", use_container_width=True)
+            if p_path.exists(): st.download_button("💾 PLAN.XLSX", p_path.read_bytes(), "PLAN.xlsx", use_container_width=True)
 
 # -------------------------
 # 2) GOOGLE MAPS
@@ -132,13 +135,17 @@ if opcion == "1. Asignación de Reparto":
 elif opcion == "2. Google Maps (Rutas Móvil)":
     st.subheader("📍 Navegación (Origen: Vall d'Uxo)")
     
-    f_user = st.file_uploader("Subir PLAN.xlsx (Opcional)", type=["xlsx"])
-    path_plan = save_upload(f_user, workdir / "temp_plan.xlsx") if f_user else (workdir / "PLAN.xlsx" if (workdir / "PLAN.xlsx").exists() else None)
+    f_user = st.file_uploader("Subir PLAN.xlsx manual", type=["xlsx"])
+    path_plan = None
+    if f_user:
+        path_plan = save_upload(f_user, workdir / "temp_plan.xlsx")
+    elif (workdir / "PLAN.xlsx").exists():
+        path_plan = workdir / "PLAN.xlsx"
+        st.info("Utilizando el plan de la sesión actual.")
 
     if path_plan:
         try:
             xl = pd.ExcelFile(path_plan)
-            # Filtramos hojas que no son de reparto
             ignorar = ["METADATOS", "LOG", "INSTRUCCIONES", "RESUMEN_GENERAL", "RESUMEN"]
             hojas = [h for h in xl.sheet_names if h.upper() not in ignorar]
             
@@ -146,13 +153,13 @@ elif opcion == "2. Google Maps (Rutas Móvil)":
                 sel = st.selectbox(f"Selecciona Ruta ({len(hojas)} totales):", hojas)
                 df = pd.read_excel(path_plan, sheet_name=sel)
                 
-                # Buscador flexible de columnas
                 c_dir = next((c for c in df.columns if "DIR" in str(c).upper()), None)
                 c_pob = next((c for c in df.columns if "POB" in str(c).upper() or "LOC" in str(c).upper()), "")
 
                 if c_dir:
-                    # ORIGEN FIJO: Vall d'Uxo
-                    origen_url = urllib.parse.quote("Vall d'Uxo, Castellon")
+                    # CONFIGURACIÓN ORIGEN: Vall d'Uxo
+                    origen_fijo = "Vall d'Uxo, Castellon"
+                    origen_encoded = urllib.parse.quote(origen_fijo)
                     
                     direcciones = []
                     for _, fila in df.iterrows():
@@ -161,21 +168,21 @@ elif opcion == "2. Google Maps (Rutas Móvil)":
                     
                     st.info(f"🚩 Ruta: {sel} | Paradas: {len(direcciones)}")
                     
-                    # Tramos de 9 paradas
+                    # Generar tramos de 9 paradas
                     for i in range(0, len(direcciones), 9):
                         t = direcciones[i:i+9]
                         destino = t[-1]
                         waypoints = t[:-1]
                         
-                        # URL Profesional: Origin -> Waypoints -> Destination
-                        link = f"https://www.google.com/maps/dir/?api=1&origin={origen_url}&destination={destino}"
+                        # URL PROFESIONAL: Origen fijo -> Puntos intermedios -> Destino
+                        url = f"https://www.google.com/maps/dir/?api=1&origin={origen_encoded}&destination={destino}"
                         if waypoints:
-                            link += f"&waypoints={'|'.join(waypoints)}"
+                            url += f"&waypoints={'|'.join(waypoints)}"
                         
-                        st.link_button(f"🚗 Iniciar Tramo {i+1} a {i+len(t)}", link, use_container_width=True)
+                        st.link_button(f"🚗 Abrir Tramo {i+1} a {i+len(t)}", url, use_container_width=True)
                 else:
-                    st.error("No se encuentra la columna de dirección.")
+                    st.error("Columna 'Dirección' no encontrada.")
             else:
-                st.warning("No hay rutas detectadas en este archivo.")
+                st.warning("No hay rutas válidas.")
         except Exception as e:
             st.error(f"Error: {e}")
