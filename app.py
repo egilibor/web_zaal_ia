@@ -10,118 +10,116 @@ import streamlit as st
 import pandas as pd
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="ZAAL IA - Logística", layout="wide", page_icon="🚚")
-st.title("🚀 ZAAL IA: Generador de Rutas (Orden de Carretera)")
+st.set_page_config(page_title="ZAAL IA - Logística Universal", layout="wide", page_icon="🚚")
+st.title("🚀 ZAAL IA: Portal de Reparto Inteligente")
 
-# --- LA BIBLIA DEL REPARTIDOR (Ruta Real) ---
-# Definimos el orden de paso saliendo de Vall d'Uxo. 
-# Si entra un pueblo nuevo, solo hay que añadirlo aquí con su número de orden.
-SECUENCIA_RUTA = {
-    "VALL D'UXO": 1,
-    "ALFONDEGUILLA": 2,
-    "ARTANA": 3,
-    "ESLIDA": 4,
-    "AIN": 5,
-    "ALCUDIA DE VEO": 6,
-    "BETXI": 7,
-    "ONDA": 8,
-    "RIBESALBES": 9,
-    "FANZARA": 10,
-    "ALCORA": 11,
-    "L'ALCORA": 11,
-    "FIGUEROLES": 12,
-    "LUCENA": 13,
-    "VISTABELLA": 14
-}
-
-def asignar_orden(fila, col_pob):
-    pueblo = str(fila[col_pob]).upper().strip()
-    # Si el pueblo está en la lista, su peso es el número asignado (1, 2, 3...)
-    # Si no está, le damos un 999 para que vaya al final.
-    return SECUENCIA_RUTA.get(pueblo, 999)
-
-# --- RUTAS ---
+# --- RUTAS DE PROYECTO ---
 REPO_DIR = Path(__file__).resolve().parent
 SCRIPT_GPT = REPO_DIR / "reparto_gpt.py"
 SCRIPT_GEMINI = REPO_DIR / "reparto_gemini.py"
 
 def get_workdir():
     if "workdir" not in st.session_state:
-        st.session_state.workdir = Path(tempfile.mkdtemp(prefix="zaal_fix_"))
+        st.session_state.workdir = Path(tempfile.mkdtemp(prefix="zaal_app_"))
     return Path(st.session_state.workdir)
 
 workdir = get_workdir()
 
-# --- INTERFAZ ---
-opcion = st.sidebar.selectbox("Menú:", ["1. Generar Plan", "2. Google Maps (Navegación)"])
+# --- MONITOR DE EJECUCIÓN ---
+def run_ia_process(cmd, cwd):
+    log_area = st.empty()
+    full_log = ""
+    try:
+        process = subprocess.Popen(
+            cmd, cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
+            text=True, bufsize=1, universal_newlines=True
+        )
+        for line in process.stdout:
+            full_log += line
+            log_area.code(full_log)
+        process.wait()
+        return process.returncode
+    except Exception as e:
+        st.error(f"Fallo crítico: {e}")
+        return 1
 
-if opcion == "1. Generar Plan":
-    st.subheader("Fase 1 y 2: Clasificación y Optimización")
+# --- INTERFAZ ---
+tab1, tab2 = st.tabs(["🏗️ Generar Plan", "📍 Navegación"])
+
+with tab1:
+    st.subheader("Procesamiento de Rutas (Cualquier Zona)")
     csv_file = st.file_uploader("Sube el CSV de llegadas", type=["csv"])
     
-    if csv_file and st.button("🚀 INICIAR PROCESO"):
+    if csv_file and st.button("🚀 INICIAR OPTIMIZACIÓN", type="primary"):
         input_path = workdir / "llegadas.csv"
         input_path.write_bytes(csv_file.getbuffer())
         
-        with st.status("Procesando...", expanded=True) as status:
-            st.write("⏳ Ejecutando Clasificación...")
-            subprocess.run([sys.executable, str(SCRIPT_GPT), "--csv", "llegadas.csv", "--out", "salida.xlsx"], cwd=workdir)
-            
-            st.write("⏳ Ejecutando Optimización Geográfica...")
-            xl = pd.ExcelFile(workdir / "salida.xlsx")
-            rango = f"0-{len(xl.sheet_names)-1}"
-            subprocess.run([sys.executable, str(SCRIPT_GEMINI), "--seleccion", rango, "--in", "salida.xlsx", "--out", "PLAN.xlsx"], cwd=workdir)
-            
-            status.update(label="✅ Plan Generado", state="complete")
+        # Copia de reglas necesarias
+        if (REPO_DIR / "Reglas_hospitales.xlsx").exists():
+            shutil.copy(REPO_DIR / "Reglas_hospitales.xlsx", workdir / "Reglas_hospitales.xlsx")
 
+        # FASE 1
+        st.info("Fase 1: Clasificando por zonas...")
+        rc1 = run_ia_process([sys.executable, str(SCRIPT_GPT), "--csv", "llegadas.csv", "--out", "salida.xlsx"], workdir)
+        
+        if rc1 == 0:
+            # FASE 2: Aquí es donde Gemini aplica su mapa interno
+            st.info("Fase 2: Aplicando optimización geográfica universal...")
+            xl = pd.ExcelFile(workdir / "salida.xlsx")
+            hojas = [h for h in xl.sheet_names if not any(x in h.upper() for x in ["METADATOS", "RESUMEN"])]
+            rango = f"0-{len(hojas)-1}"
+            
+            # El script de Gemini ahora manda en el orden
+            rc2 = run_ia_process([sys.executable, str(SCRIPT_GEMINI), "--seleccion", rango, "--in", "salida.xlsx", "--out", "PLAN.xlsx"], workdir)
+            
+            if rc2 == 0:
+                st.success("✅ Plan optimizado y listo para descargar.")
+
+    # Descarga
     if (workdir / "PLAN.xlsx").exists():
         st.download_button("💾 DESCARGAR PLAN.XLSX", (workdir / "PLAN.xlsx").read_bytes(), "PLAN.xlsx", use_container_width=True)
 
-elif opcion == "2. Google Maps (Navegación)":
-    st.subheader("📍 Tramos de Ruta (Orden Geográfico Real)")
-    f_user = st.file_uploader("Subir PLAN.xlsx", type=["xlsx"])
+with tab2:
+    st.subheader("📍 Navegación por Tramos (Orden del Plan)")
+    f_user = st.file_uploader("Subir PLAN.xlsx", type=["xlsx"], key="nav_uploader")
     
-    path_file = None
+    path_plan = None
     if f_user:
-        path_file = workdir / "manual_nav.xlsx"
-        path_file.write_bytes(f_user.getbuffer())
+        path_plan = workdir / "nav_temp.xlsx"
+        path_plan.write_bytes(f_user.getbuffer())
     elif (workdir / "PLAN.xlsx").exists():
-        path_file = workdir / "PLAN.xlsx"
+        path_plan = workdir / "PLAN.xlsx"
 
-    if path_file:
-        xl = pd.ExcelFile(path_file)
-        hojas = [h for h in xl.sheet_names if not any(x in h.upper() for x in ["METADATOS", "RESUMEN"])]
-        sel = st.selectbox("Selecciona la ruta:", hojas)
+    if path_plan:
+        # Cargamos el Excel respetando el orden original de las filas
+        xl = pd.ExcelFile(path_plan)
+        hojas = [h for h in xl.sheet_names if not any(x in h.upper() for x in ["METADATOS", "RESUMEN", "LOG"])]
+        sel = st.selectbox("Selecciona la ruta a navegar:", hojas)
         
-        df = pd.read_excel(path_file, sheet_name=sel)
+        df = pd.read_excel(path_plan, sheet_name=sel)
         
-        # BUSCAR COLUMNAS
-        c_pob = next((c for c in df.columns if "POB" in str(c).upper()), None)
+        # BUSCADOR DE COLUMNAS
         c_dir = next((c for c in df.columns if "DIR" in str(c).upper()), None)
-        c_cp = next((c for c in df.columns if "CP" in str(c).upper()), None)
+        c_pob = next((c for c in df.columns if "POB" in str(c).upper()), "")
 
-        if c_pob and c_dir:
-            # APLICAMOS EL ORDEN DE CARRETERA
-            df['orden_logico'] = df.apply(lambda x: asignar_orden(x, c_pob), axis=1)
-            
-            # ORDENAMOS: 1º Por el pueblo (carretera), 2º Por CP, 3º Por dirección
-            df = df.sort_values(by=['orden_logico', c_cp if c_cp else c_pob, c_dir])
-            
-            st.success(f"Ruta '{sel}' optimizada por sentido de marcha.")
-            
+        if c_dir:
+            # IMPORTANTE: No usamos sort_values(). Usamos el orden tal cual viene del Excel.
             direcciones = [urllib.parse.quote(f"{f[c_dir]}, {f[c_pob]}") for _, f in df.iterrows()]
             
+            st.info(f"🚩 Ruta: {sel} | Paradas: {len(direcciones)}")
             
-
+            
+            
             for i in range(0, len(direcciones), 9):
                 t = direcciones[i:i+9]
                 origen = urllib.parse.quote("Vall d'Uxo, Castellon") if i == 0 else ""
                 
+                # Generamos la URL de Google Maps
+                # origin=0 (con coordenadas/dirección) o origin=5 (ubicación actual)
                 if origen:
                     url = f"https://www.google.com/maps/dir/?api=1&origin={origen}&destination={t[-1]}&waypoints={'|'.join(t[:-1])}"
                 else:
                     url = f"https://www.google.com/maps/dir/?api=1&destination={t[-1]}&waypoints={'|'.join(t[:-1])}"
                 
-                # Mostramos el pueblo dominante en el tramo para que el chófer sepa dónde va
-                pueblo_tramo = df.iloc[i][c_pob]
-                st.link_button(f"🚗 TRAMO {i//9 + 1}: {pueblo_tramo} ({len(t)} paradas)", url, use_container_width=True)
+                # Etiqueta dinámica: muestra la primera y última parada del tramo
+                st.link_button(f"🚗 TRAMO {i//9 + 1}: {df.iloc[i][c_dir]} ➡️ {df.iloc[i+len(t)-1][c_dir]}", url, use_container_width=True)
