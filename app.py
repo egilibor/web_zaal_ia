@@ -1,114 +1,201 @@
-import streamlit as st
-import pandas as pd
-import subprocess
 import sys
-import os
 import uuid
+import shutil
+import tempfile
+import subprocess
 from pathlib import Path
 
-# --- CONFIGURACIÓN ---
-st.set_page_config(page_title="ZAAL IA - Panel Estado", layout="wide")
+import streamlit as st
 
-# Rutas fijas del proyecto
+st.set_page_config(page_title="Reparto determinista", layout="wide")
+st.title("Reparto determinista (Streamlit)")
+
+# --- Paths en repo ---
 REPO_DIR = Path(__file__).resolve().parent
-PYTHON_EXE = sys.executable
+SCRIPT_REPARTO = REPO_DIR / "reparto_gpt.py"
+SCRIPT_GEMINI = REPO_DIR / "reparto_gemini.py"
+REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
 
-# Carpeta de trabajo limpia en /tmp (para evitar el error de inotify)
-if "workdir" not in st.session_state:
-    st.session_state.workdir = Path("/tmp") / f"reparto_{uuid.uuid4().hex[:6]}"
-    st.session_state.workdir.mkdir(parents=True, exist_ok=True)
+# -------------------------
+# Utilidades
+# -------------------------
+def ensure_workdir() -> Path:
+    if "workdir" not in st.session_state:
+        st.session_state.workdir = Path(tempfile.mkdtemp(prefix="reparto_"))
+        st.session_state.run_id = str(uuid.uuid4())[:8]
+    return st.session_state.workdir
 
-workdir = st.session_state.workdir
 
-# --- SIDEBAR: ESTADO (Tal cual la captura que enviaste) ---
+def reset_session_dir():
+    wd = st.session_state.get("workdir")
+    if wd and isinstance(wd, Path):
+        shutil.rmtree(wd, ignore_errors=True)
+    st.session_state.workdir = Path(tempfile.mkdtemp(prefix="reparto_"))
+    st.session_state.run_id = str(uuid.uuid4())[:8]
+
+
+def save_upload(uploaded_file, dst: Path) -> Path:
+    dst.write_bytes(uploaded_file.getbuffer())
+    return dst
+
+
+def run_process(cmd: list[str], cwd: Path, timeout_s: int = 300) -> tuple[int, str, str]:
+    try:
+        p = subprocess.run(
+            cmd,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+        )
+        return p.returncode, p.stdout, p.stderr
+    except subprocess.TimeoutExpired as e:
+        stdout = e.stdout or ""
+        stderr = e.stderr or ""
+        return 124, stdout, f"TIMEOUT tras {timeout_s}s\n{stderr}"
+
+
+def show_logs(stdout: str, stderr: str):
+    if stdout.strip():
+        st.subheader("STDOUT")
+        st.code(stdout)
+    if stderr.strip():
+        st.subheader("STDERR")
+        st.code(stderr)
+
+
+# -------------------------
+# Estado
+# -------------------------
+workdir = ensure_workdir()
+
 with st.sidebar:
     st.header("Estado")
-    st.write(f"**Run:** `{uuid.uuid4().hex[:7]}`")
-    st.write(f"**Workdir:** `{workdir}`")
-    st.write(f"**Repo dir:** `{REPO_DIR}`")
-    st.write(f"**Python:** `{PYTHON_EXE}`")
-    
+    st.write(f"Run: `{st.session_state.run_id}`")
+    st.write(f"Workdir: `{workdir}`")
+    st.write(f"Repo dir: `{REPO_DIR}`")
+    st.write(f"Python: `{sys.executable}`")
+
     st.divider()
-    # Verificación de archivos en tiempo real
-    gpt_exists = (REPO_DIR / "reparto_gpt.py").exists()
-    gemini_exists = (REPO_DIR / "reparto_gemini.py").exists()
-    reglas_exists = (REPO_DIR / "Reglas_hospitales.xlsx").exists()
-    
-    st.write(f"GPT: `reparto_gpt.py` exists = **{gpt_exists}**")
-    st.write(f"Gemini: `reparto_gemini.py` exists = **{gemini_exists}**")
-    st.write(f"Reglas: `Reglas_hospitales.xlsx` exists = **{reglas_exists}**")
-    
+    st.write(f"GPT: `{SCRIPT_REPARTO.name}` exists = `{SCRIPT_REPARTO.exists()}`")
+    st.write(f"Gemini: `{SCRIPT_GEMINI.name}` exists = `{SCRIPT_GEMINI.exists()}`")
+    st.write(f"Reglas: `{REGLAS_REPO.name}` exists = `{REGLAS_REPO.exists()}`")
+
+    st.divider()
     if st.button("Reset sesión"):
-        st.session_state.clear()
+        reset_session_dir()
         st.rerun()
 
-# --- CUERPO PRINCIPAL ---
-st.title("🚚 ZAAL IA: Sistema de Reparto")
+# -------------------------
+# Verificaciones duras
+# -------------------------
+missing = []
+if not SCRIPT_REPARTO.exists():
+    missing.append("reparto_gpt.py")
+if not SCRIPT_GEMINI.exists():
+    missing.append("reparto_gemini.py")
+if not REGLAS_REPO.exists():
+    missing.append("Reglas_hospitales.xlsx")
 
-# 1) SUBIR CSV
-st.subheader("1) Subir CSV de llegadas")
-csv_file = st.file_uploader("CSV de llegadas", type=["csv"], label_visibility="collapsed")
+if missing:
+    st.error(
+        "Faltan archivos en el repo desplegado: " + ", ".join(missing) + "\n\n"
+        "Revisa que estén en el branch desplegado (main) y en la misma carpeta que app.py."
+    )
+    st.stop()
 
-if csv_file:
-    # Guardar archivo
-    input_path = workdir / "llegadas.csv"
-    with open(input_path, "wb") as f:
-        f.write(csv_file.getbuffer())
+st.divider()
 
-    # 2) EJECUTAR FASE 1
-    st.subheader("2) Ejecutar (genera salida.xlsx)")
-    if st.button("Ejecutar", type="primary"):
-        with st.status("Ejecutando clasificación...", expanded=True) as status:
-            # Limpieza previa
-            if (workdir / "salida.xlsx").exists(): os.remove(workdir / "salida.xlsx")
-            
-            # Ejecución directa
-            subprocess.run([PYTHON_EXE, str(REPO_DIR / "reparto_gpt.py"), "--csv", "llegadas.csv", "--out", "salida.xlsx"], cwd=str(workdir))
-            
-            if (workdir / "salida.xlsx").exists():
-                status.update(label="✅ Archivo salida.xlsx generado", state="complete")
-                st.rerun()
-            else:
-                st.error("Error: El script no generó salida.xlsx")
+# -------------------------
+# MENÚ
+# -------------------------
+opcion = st.selectbox("Menú", ["Asignación reparto"])
 
-# 3) SELECCIÓN Y OPTIMIZACIÓN (Tu flujo solicitado)
-if (workdir / "salida.xlsx").exists():
+st.divider()
+
+# -------------------------
+# OPCIÓN: Asignación reparto
+# -------------------------
+if opcion == "Asignación reparto":
+    st.subheader("1) Subir CSV de llegadas")
+    csv_file = st.file_uploader("CSV de llegadas", type=["csv"])
+
     st.divider()
-    st.subheader("3) Seleccionar Ruta y Optimizar")
-    
-    xl = pd.ExcelFile(workdir / "salida.xlsx")
-    hojas = [h for h in xl.sheet_names if not any(x in h.upper() for x in ["METADATOS", "RESUMEN"])]
-    
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        ruta_sel = st.selectbox("Elige la hoja:", hojas)
-    with col2:
-        st.write("")
-        if st.button(f"Optimizar {ruta_sel}"):
-            idx = xl.sheet_names.index(ruta_sel)
-            with st.spinner(f"Gemini optimizando {ruta_sel}..."):
-                subprocess.run([PYTHON_EXE, str(REPO_DIR / "reparto_gemini.py"), "--seleccion", str(idx), "--in", "salida.xlsx", "--out", "PLAN.xlsx"], cwd=str(workdir))
-                st.session_state.finalizado = True
-                st.session_state.ruta_nombre = ruta_sel
-                st.rerun()
 
-# 4) RESULTADOS
-if st.session_state.get("finalizado") and (workdir / "PLAN.xlsx").exists():
-    st.success(f"✅ Ruta {st.session_state.ruta_nombre} optimizada correctamente.")
-    
-    col_dl1, col_dl2 = st.columns(2)
-    with col_dl1:
-        st.download_button("Descargar salida.xlsx", (workdir / "salida.xlsx").read_bytes(), "salida.xlsx")
-    with col_dl2:
-        st.download_button("Descargar PLAN.xlsx", (workdir / "PLAN.xlsx").read_bytes(), "PLAN_ZAAL.xlsx")
+    if not csv_file:
+        st.info("Sube el CSV para habilitar la ejecución.")
+        st.stop()
 
-    # Botones de Google Maps
-    df = pd.read_excel(workdir / "PLAN.xlsx", sheet_name=st.session_state.ruta_nombre)
-    c_dir = next((c for c in df.columns if "DIR" in str(c).upper()), None)
-    if c_dir:
-        st.write("### 📍 Enlaces de Navegación")
-        direcciones = [urllib.parse.quote(str(d)) for d in df[c_dir].tolist()]
-        for i in range(0, len(direcciones), 9):
-            t = direcciones[i:i+9]
-            url = f"https://www.google.com/maps/dir/?api=1&origin=Vall+dUxo&destination={t[-1]}&waypoints={'|'.join(t[:-1])}"
-            st.link_button(f"🚗 TRAMO {i//9 + 1}", url, use_container_width=True)
+    # Guardar CSV en workdir
+    csv_path = save_upload(csv_file, workdir / "llegadas.csv")
+
+    # Copiar reglas del repo al workdir (para que el script las encuentre fácil)
+    (workdir / "Reglas_hospitales.xlsx").write_bytes(REGLAS_REPO.read_bytes())
+
+    st.subheader("2) Ejecutar (genera salida.xlsx y PLAN.xlsx)")
+    st.caption('Gemini se ejecuta automáticamente con --seleccion "1-9".')
+
+    if st.button("Ejecutar", type="primary"):
+        # ---- GPT ----
+        cmd_gpt = [
+            sys.executable,
+            str(SCRIPT_REPARTO),
+            "--csv", "llegadas.csv",
+            "--reglas", "Reglas_hospitales.xlsx",
+            "--out", "salida.xlsx",
+        ]
+
+        with st.spinner("Ejecutando reparto_gpt.py…"):
+            rc, out, err = run_process(cmd_gpt, cwd=workdir, timeout_s=300)
+
+        if rc != 0:
+            st.error("❌ Falló reparto_gpt.py")
+            show_logs(out, err)
+            st.stop()
+
+        salida_path = workdir / "salida.xlsx"
+        if not salida_path.exists():
+            st.error("Terminó sin error, pero no encuentro `salida.xlsx` en el workdir.")
+            show_logs(out, err)
+            st.stop()
+
+        # ---- GEMINI (selección fija 1-9) ----
+        cmd_gemini = [
+            sys.executable,
+            str(SCRIPT_GEMINI),
+            "--seleccion", "1-9",
+            "--in", "salida.xlsx",
+            "--out", "PLAN.xlsx",
+        ]
+
+        with st.spinner('Ejecutando reparto_gemini.py (selección 1-9)…'):
+            rc2, out2, err2 = run_process(cmd_gemini, cwd=workdir, timeout_s=300)
+
+        if rc2 != 0:
+            st.error("❌ Falló reparto_gemini.py")
+            show_logs(out2, err2)
+            st.stop()
+
+        plan_path = workdir / "PLAN.xlsx"
+        if not plan_path.exists():
+            st.error("Terminó sin error, pero no encuentro `PLAN.xlsx` en el workdir.")
+            show_logs(out2, err2)
+            st.stop()
+
+        st.success("✅ Archivos generados: salida.xlsx y PLAN.xlsx")
+
+        col_a, col_b = st.columns(2, gap="large")
+        with col_a:
+            st.download_button(
+                "Descargar salida.xlsx",
+                data=salida_path.read_bytes(),
+                file_name="salida.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        with col_b:
+            st.download_button(
+                "Descargar PLAN.xlsx",
+                data=plan_path.read_bytes(),
+                file_name="PLAN.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
