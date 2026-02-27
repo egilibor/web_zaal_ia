@@ -34,7 +34,7 @@ ORIGEN_LON = -0.217351
 
 
 # ============================================================
-# UTILIDADES
+# UTILIDADES GENERALES
 # ============================================================
 
 def clean_text(x) -> str:
@@ -58,35 +58,50 @@ def norm(s: str) -> str:
     return s
 
 
+def safe_sheet_name(name: str, existing: set) -> str:
+    name = re.sub(r"[\\/*?:\[\]]", " ", str(name))
+    name = re.sub(r"\s+", " ", name).strip()
+    if not name:
+        name = "SIN_NOMBRE"
+    base = name[:31]
+    candidate = base
+    i = 2
+    while candidate in existing:
+        suffix = f" {i}"
+        candidate = (base[:31-len(suffix)] + suffix).strip()
+        i += 1
+    existing.add(candidate)
+    return candidate
+
+
+# ============================================================
+# COORDENADAS Y RUTA
+# ============================================================
+
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
     dlambda = math.radians(lon2 - lon1)
-
     a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
     return 2 * R * math.asin(math.sqrt(a))
 
 
 def build_pueblo_coords(libro_path: Path) -> dict:
     df = pd.read_excel(libro_path)
-
     df = df.dropna(subset=["PUEBLO", "Latitud", "Longitud"])
     df["PUEBLO_NORM"] = df["PUEBLO"].astype(str).apply(norm)
 
-    coords = (
+    return (
         df.groupby("PUEBLO_NORM")
         .agg({"Latitud": "mean", "Longitud": "mean"})
         .to_dict("index")
     )
 
-    return coords
-
 
 def nearest_neighbor_route(pueblos: list[str], coords: dict) -> list[str]:
     remaining = pueblos.copy()
     route = []
-
     current_lat, current_lon = ORIGEN_LAT, ORIGEN_LON
 
     while remaining:
@@ -127,10 +142,8 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str):
     df["Kgs"] = pd.to_numeric(df.get("Kgs", 0), errors="coerce").fillna(0)
     df["Bultos"] = pd.to_numeric(df.get("Btos.", 0), errors="coerce").fillna(0)
 
-    resto = df.copy()
-
     resto_grp = (
-        resto.groupby(["Z.Rep", "Población", "Dir_OK"], dropna=False)
+        df.groupby(["Z.Rep", "Población", "Dir_OK"], dropna=False)
         .agg(
             Expediciones=("Exp", "nunique"),
             Bultos=("Bultos", "sum"),
@@ -145,29 +158,24 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str):
     wb_out.remove(wb_out.active)
 
     coords = build_pueblo_coords(LIBRO_COORDS)
-
     existing = set()
 
     for z, sub in resto_grp.groupby("Z.Rep"):
 
-        ws = wb_out.create_sheet(f"ZREP_{z}")
+        sheet_name = safe_sheet_name(f"ZREP_{z}", existing)
+        ws = wb_out.create_sheet(sheet_name)
 
         out = sub.copy()
-
         out["PUEBLO_NORM"] = out["Población"].apply(norm)
 
         pueblos_unicos = list(dict.fromkeys(out["PUEBLO_NORM"].tolist()))
-
         orden_pueblos = nearest_neighbor_route(pueblos_unicos, coords)
-
         ranking = {p: i for i, p in enumerate(orden_pueblos)}
 
         out["orden_pueblo"] = out["PUEBLO_NORM"].map(ranking).fillna(9999)
-
         out = out.sort_values(["orden_pueblo"], kind="stable").reset_index(drop=True)
 
         out.insert(0, "Parada", range(1, len(out) + 1))
-
         out = out.drop(columns=["PUEBLO_NORM", "orden_pueblo"])
 
         for row in dataframe_to_rows(out, index=False, header=True):
