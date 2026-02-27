@@ -227,11 +227,8 @@ def add_df_sheet(wb: Workbook, name: str, df_sheet: pd.DataFrame, widths: List[i
     ws = wb.create_sheet(title=name)
     out = df_sheet.copy()
     out.insert(0, "Nº", range(1, len(out) + 1))
-    # openpyxl no acepta pandas.NA; convertir todos los NA/NaN a None de forma determinista
-    out = out.where(pd.notna(out), None)
     for row in dataframe_to_rows(out, index=False, header=True):
-        # Asegura que cualquier NA que sobreviva (p.ej. objetos) se convierta a None
-        ws.append([None if (isinstance(v, type(pd.NA)) or v is pd.NA) else v for v in row])
+        ws.append(row)
     style_sheet(ws)
     set_widths(ws, widths)
 
@@ -392,23 +389,6 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
         }
     )
 
-    # RESUMEN_UNICO = RESUMEN_GENERAL + RESUMEN_RUTAS_RESTO (esquema unificado)
-    # Nota: se evita cualquier inferencia; solo se reetiquetan columnas para poder apilar ambas tablas.
-    # En RESUMEN_UNICO no se incluye la fila "RESTO (todas rutas)" del resumen general,
-    # porque ya queda desglosado por rutas en el bloque RESTO (Z.Rep).
-    resumen_unico_general = overview[overview["Bloque"].ne("RESTO (todas rutas)")].copy()
-    resumen_unico_general.insert(0, "Tipo", "GENERAL")
-    resumen_unico_general = resumen_unico_general.rename(columns={"Bloque": "Clave"})
-    resumen_unico_general["Bultos"] = pd.NA
-    resumen_unico_general = resumen_unico_general[["Tipo", "Clave", "Paradas", "Expediciones", "Bultos", "Kilos"]]
-
-    resumen_unico_resto = resto_summary.copy()
-    resumen_unico_resto.insert(0, "Tipo", "RESTO")
-    resumen_unico_resto = resumen_unico_resto.rename(columns={"Z.Rep": "Clave"})
-    resumen_unico_resto = resumen_unico_resto[["Tipo", "Clave", "Paradas", "Expediciones", "Bultos", "Kilos"]]
-
-    resumen_unico = pd.concat([resumen_unico_general, resumen_unico_resto], ignore_index=True)
-
     wb_out = Workbook()
     wb_out.remove(wb_out.active)
 
@@ -425,7 +405,6 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     )
     add_df_sheet(wb_out, "METADATOS", meta, widths=[6, 22, 90])
     add_df_sheet(wb_out, "RESUMEN_GENERAL", overview, widths=[6, 22, 12, 14, 12])
-    add_df_sheet(wb_out, "RESUMEN_UNICO", resumen_unico, widths=[6, 12, 28, 12, 14, 12, 12])
     add_df_sheet(
         wb_out,
         "HOSPITALES",
@@ -440,35 +419,21 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     )
     add_df_sheet(wb_out, "RESUMEN_RUTAS_RESTO", resto_summary, widths=[6, 18, 10, 14, 12, 12])
 
-coords = build_pueblo_coords()
-existing = set(wb_out.sheetnames)
+    existing = set(wb_out.sheetnames)
+    for z, sub in resto_grp.groupby("Z.Rep"):
+        sheet_name = safe_sheet_name(f"ZREP_{z}", existing)
+        ws = wb_out.create_sheet(sheet_name)
+        out = sub.drop(columns=["Z.Rep", "Parada_key"]).copy()
+        out = out.sort_values(["Población", "Dirección"], kind="stable").reset_index(drop=True)
+        out.insert(0, "Parada", range(1, len(out) + 1))
+        for row in dataframe_to_rows(out, index=False, header=True):
+            ws.append(row)
+        style_sheet(ws)
+        set_widths(ws, [8, 18, 55, 70, 16, 12, 12, 22])
 
-for z, sub in resto_grp.groupby("Z.Rep"):
-    sheet_name = safe_sheet_name(f"ZREP_{z}", existing)
-    ws = wb_out.create_sheet(sheet_name)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    wb_out.save(out_path)
 
-    out = sub.drop(columns=["Z.Rep", "Parada_key"]).copy()
-
-    out["PUEBLO_NORM"] = out["Población"].apply(norm)
-    pueblos_unicos = list(dict.fromkeys(out["PUEBLO_NORM"].tolist()))
-
-    orden_pueblos = nearest_neighbor_route(pueblos_unicos, coords)
-    ranking = {p: i for i, p in enumerate(orden_pueblos)}
-
-    out["orden_pueblo"] = out["PUEBLO_NORM"].map(ranking).fillna(9999)
-    out = out.sort_values(["orden_pueblo"], kind="stable").reset_index(drop=True)
-    out = out.drop(columns=["PUEBLO_NORM", "orden_pueblo"])
-
-    out.insert(0, "Parada", range(1, len(out) + 1))
-
-    for row in dataframe_to_rows(out, index=False, header=True):
-        ws.append(row)
-
-    style_sheet(ws)
-    set_widths(ws, [8, 18, 55, 70, 16, 12, 12, 22])
-
-out_path.parent.mkdir(parents=True, exist_ok=True)
-wb_out.save(out_path)
 
 def main():
     # Directorio de trabajo
