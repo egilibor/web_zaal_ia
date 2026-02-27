@@ -22,7 +22,7 @@ import datetime as _dt
 import re
 from pathlib import Path
 
-WORKDIR = Path(r"C:\REPARTO")
+WORKDIR = Path(".")
 DEFAULT_CSV = str(WORKDIR / "llegadas.csv")
 DEFAULT_REGLAS = str(WORKDIR / "Reglas_hospitales.xlsx")
 DEFAULT_OUT = str(WORKDIR / "salida.xlsx")
