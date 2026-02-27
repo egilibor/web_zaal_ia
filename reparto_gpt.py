@@ -22,7 +22,7 @@ import datetime as _dt
 import re
 from pathlib import Path
 
-WORKDIR = Path(".")
+WORKDIR = Path(r"C:\REPARTO")
 DEFAULT_CSV = str(WORKDIR / "llegadas.csv")
 DEFAULT_REGLAS = str(WORKDIR / "Reglas_hospitales.xlsx")
 DEFAULT_OUT = str(WORKDIR / "salida.xlsx")
@@ -440,31 +440,35 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     )
     add_df_sheet(wb_out, "RESUMEN_RUTAS_RESTO", resto_summary, widths=[6, 18, 10, 14, 12, 12])
 
-    existing = set(wb_out.sheetnames)
-    for z, sub in resto_grp.groupby("Z.Rep"):
-        sheet_name = safe_sheet_name(f"ZREP_{z}", existing)
-        ws = wb_out.create_sheet(sheet_name)
-        out = sub.drop(columns=["Z.Rep", "Parada_key"]).copy()
-        coords = build_pueblo_coords()
+coords = build_pueblo_coords()
+existing = set(wb_out.sheetnames)
 
-        out["PUEBLO_NORM"] = out["Población"].apply(norm)
-        pueblos_unicos = list(dict.fromkeys(out["PUEBLO_NORM"].tolist()))
+for z, sub in resto_grp.groupby("Z.Rep"):
+    sheet_name = safe_sheet_name(f"ZREP_{z}", existing)
+    ws = wb_out.create_sheet(sheet_name)
 
-        orden_pueblos = nearest_neighbor_route(pueblos_unicos, coords)
-        ranking = {p: i for i, p in enumerate(orden_pueblos)}
+    out = sub.drop(columns=["Z.Rep", "Parada_key"]).copy()
 
-        out["orden_pueblo"] = out["PUEBLO_NORM"].map(ranking).fillna(9999)
-        out = out.sort_values(["orden_pueblo"], kind="stable").reset_index(drop=True)
-        out = out.drop(columns=["PUEBLO_NORM", "orden_pueblo"])
-        out.insert(0, "Parada", range(1, len(out) + 1))
-        for row in dataframe_to_rows(out, index=False, header=True):
-            ws.append(row)
-        style_sheet(ws)
-        set_widths(ws, [8, 18, 55, 70, 16, 12, 12, 22])
+    out["PUEBLO_NORM"] = out["Población"].apply(norm)
+    pueblos_unicos = list(dict.fromkeys(out["PUEBLO_NORM"].tolist()))
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    wb_out.save(out_path)
+    orden_pueblos = nearest_neighbor_route(pueblos_unicos, coords)
+    ranking = {p: i for i, p in enumerate(orden_pueblos)}
 
+    out["orden_pueblo"] = out["PUEBLO_NORM"].map(ranking).fillna(9999)
+    out = out.sort_values(["orden_pueblo"], kind="stable").reset_index(drop=True)
+    out = out.drop(columns=["PUEBLO_NORM", "orden_pueblo"])
+
+    out.insert(0, "Parada", range(1, len(out) + 1))
+
+    for row in dataframe_to_rows(out, index=False, header=True):
+        ws.append(row)
+
+    style_sheet(ws)
+    set_widths(ws, [8, 18, 55, 70, 16, 12, 12, 22])
+
+out_path.parent.mkdir(parents=True, exist_ok=True)
+wb_out.save(out_path)
 
 def main():
     # Directorio de trabajo
