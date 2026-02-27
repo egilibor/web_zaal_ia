@@ -1,77 +1,82 @@
-import streamlit as st
-import pandas as pd
+import sys
 import os
 import subprocess
-import time
-import io
-import glob
+import urllib.parse
+import streamlit as st
+import pandas as pd
 
-# --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="ZAAL IA - Logística", layout="wide", page_icon="🚚")
+# --- CONFIGURACIÓN ---
+st.set_page_config(page_title="ZAAL IA - Gestión Directa", layout="wide")
+st.title("🚚 ZAAL IA: Sistema de Reparto")
 
-# Forzar directorio local
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+# --- PASO 1: CARGA ---
+csv_file = st.sidebar.file_uploader("1. Sube el CSV de llegadas", type=["csv"])
 
-st.title("🚀 ZAAL IA: Portal de Reparto Automatizado")
-
-# --- PASO 1: CLASIFICACIÓN ---
-st.header("1️⃣ Fase de Clasificación")
-f_csv = st.file_uploader("Sube el CSV de LLEGADAS", type=["csv"])
-
-if st.button("EJECUTAR CLASIFICACIÓN"):
-    if f_csv:
-        if os.path.exists("salida.xlsx"):
-            try: os.remove("salida.xlsx")
-            except: st.error("⚠️ Cierra 'salida.xlsx' antes de continuar.")
-        
-        with open("llegadas.csv", "wb") as f: f.write(f_csv.getbuffer())
-        
-        with st.spinner("Clasificando rutas..."):
-            cmd = ["python", "reparto_gpt.py", "--csv", "llegadas.csv", "--reglas", "Reglas_hospitales.xlsx", "--out", "salida.xlsx"]
-            subprocess.run(cmd, input="\n", capture_output=True, text=True)
-            
-            if os.path.exists("salida.xlsx"):
-                st.success("✅ Clasificación completada.")
-                st.rerun()
-
-# --- VISTA PREVIA Y DESCARGA INTERMEDIA ---
-if os.path.exists("salida.xlsx"):
-    st.markdown("---")
-    with st.expander("👀 VER Y GUARDAR ARCHIVO INTERMEDIO", expanded=True):
-        with open("salida.xlsx", "rb") as f:
-            data_int = f.read()
-            # AQUÍ ESTÁ EL CAMBIO: Usamos "stretch" para que el CMD no proteste
-            st.dataframe(pd.read_excel(io.BytesIO(data_int)).head(10), width="stretch")
-            st.download_button("💾 GUARDAR 'SALIDA.XLSX' EN MI PC", data_int, "salida.xlsx")
-
-    st.markdown("---")
-
-    # --- PASO 2: OPTIMIZACIÓN AUTOMÁTICA ---
-    st.header("2️⃣ Fase de Optimización (Plan de Carga)")
+if csv_file:
+    # Guardamos el archivo en la carpeta local (donde están tus scripts)
+    with open("llegadas.csv", "wb") as f:
+        f.write(csv_file.getbuffer())
     
-    if st.button("🚀 GENERAR PLAN FINAL (TODAS LAS RUTAS)"):
-        # Limpieza de planes antiguos
-        for f in glob.glob("PLAN_*.xlsx"): 
-            try: os.remove(f)
-            except: pass
+    # --- PASO 2: EJECUCIÓN FASE 1 ---
+    if st.sidebar.button("2. Generar salida.xlsx"):
+        # Eliminamos salida.xlsx previo para no leer datos viejos
+        if os.path.exists("salida.xlsx"):
+            os.remove("salida.xlsx")
             
-        try:
-            xl = pd.ExcelFile("salida.xlsx")
-            zonas = [h for h in xl.sheet_names if not any(x in h.upper() for x in ["RESUMEN", "LOG"])]
-            rango_auto = f"0-{len(zonas)-1}"
+        with st.spinner("Ejecutando clasificación..."):
+            # Ejecución directa en la misma carpeta
+            res = subprocess.run([sys.executable, "reparto_gpt.py", "--csv", "llegadas.csv", "--out", "salida.xlsx"], 
+                                 capture_output=True, text=True)
             
-            with st.spinner(f"Optimizando {len(zonas)} rutas..."):
-                subprocess.run(["python", "reparto_gemini.py"], input=f"{rango_auto}\n", text=True)
-                
-                planes = glob.glob("PLAN_*.xlsx")
-                if planes:
-                    plan_nombre = planes[0]
-                    st.success(f"🎯 Plan Final: {plan_nombre}")
+            if res.returncode == 0:
+                st.success("✅ Clasificación terminada en 1 segundo.")
+            else:
+                st.error(f"Error en script: {res.stderr}")
+
+# --- PASO 3: MOSTRAR RUTAS (LEER salida.xlsx) ---
+if os.path.exists("salida.xlsx"):
+    st.divider()
+    st.subheader("📋 Selecciona la ruta de salida.xlsx")
+    
+    try:
+        # Cargamos el Excel físicamente
+        xl = pd.ExcelFile("salida.xlsx")
+        hojas = [h for h in xl.sheet_names if not any(x in h.upper() for x in ["METADATOS", "RESUMEN"])]
+        
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            ruta_sel = st.selectbox("Rutas disponibles:", hojas)
+        
+        # --- PASO 4: OPTIMIZAR SELECCIÓN ---
+        with col2:
+            st.write("") # Espaciado
+            if st.button("🚀 Optimizar esta ruta", type="primary"):
+                idx = xl.sheet_names.index(ruta_sel)
+                with st.spinner(f"Optimizando {ruta_sel}..."):
+                    # Ejecutamos Gemini solo para esa hoja
+                    subprocess.run([sys.executable, "reparto_gemini.py", "--seleccion", str(idx), "--in", "salida.xlsx", "--out", "PLAN.xlsx"], 
+                                   capture_output=True, text=True)
+                    st.session_state.listo = True
+                    st.session_state.nombre = ruta_sel
                     
-                    with open(plan_nombre, "rb") as f_plan:
-                        data_final = f_plan.read()
-                        # Volvemos a usar "stretch" aquí también
-                        st.dataframe(pd.read_excel(io.BytesIO(data_final)).head(10), width="stretch")
-                        st.download_button("💾 GUARDAR PLAN FINAL EN MI PC", data_final, plan_nombre)
-        except Exception as e:
-            st.error(f"Error al leer las zonas: {e}")
+    except Exception as e:
+        st.error(f"Error leyendo el Excel: {e}")
+
+# --- PASO 5: RESULTADOS (GOOGLE MAPS) ---
+if st.session_state.get("listo") and os.path.exists("PLAN.xlsx"):
+    st.divider()
+    st.subheader(f"📍 Navegación: {st.session_state.nombre}")
+    
+    df = pd.read_excel("PLAN.xlsx", sheet_name=st.session_state.nombre)
+    c_dir = next((c for c in df.columns if "DIR" in str(c).upper()), None)
+    c_pob = next((c for c in df.columns if "POB" in str(c).upper()), "")
+
+    if c_dir:
+        direcciones = [urllib.parse.quote(f"{f[c_dir]}, {f[c_pob]}") for _, f in df.iterrows()]
+        
+        for i in range(0, len(direcciones), 9):
+            t = direcciones[i:i+9]
+            origen = urllib.parse.quote("Vall d'Uxo, Castellon") if i == 0 else ""
+            prefix = "0" if origen else "3"
+            url = f"http://googleusercontent.com/maps.google.com/{prefix}{origen}&destination={t[-1]}&waypoints={'|'.join(t[:-1])}"
+            st.link_button(f"🚗 TRAMO {i//9 + 1}: {df.iloc[i][c_dir]}", url, use_container_width=True)
