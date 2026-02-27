@@ -27,7 +27,8 @@ DEFAULT_CSV = str(WORKDIR / "llegadas.csv")
 DEFAULT_REGLAS = str(WORKDIR / "Reglas_hospitales.xlsx")
 DEFAULT_OUT = str(WORKDIR / "salida.xlsx")
 
-LIBRO_COORDS = Path("Libro_de_Servicio_Castellon_con_coordenadas.xlsx")
+
+LIBRO_COORDS = Path(__file__).resolve().parent / "Libro_de_Servicio_Castellon_con_coordenadas.xlsx"
 
 ORIGEN_LAT = 39.804106
 ORIGEN_LON = -0.217351
