@@ -8,104 +8,126 @@ from pathlib import Path
 import streamlit as st
 import pandas as pd
 
-# --- CONFIGURACIÓN ---
-st.set_page_config(page_title="ZAAL IA - Fase 1 Debug", layout="wide", page_icon="🚚")
-st.title("🚀 ZAAL IA: Monitor de Clasificación")
+# --- CONFIGURACIÓN DE INTERFAZ ---
+st.set_page_config(page_title="ZAAL IA - Control de Reparto", layout="wide", page_icon="🚚")
+st.title("🚀 ZAAL IA: Gestión de Rutas por Pasos")
 
-# --- RUTAS ---
+# --- RUTAS DE SISTEMA ---
 REPO_DIR = Path(__file__).resolve().parent
 SCRIPT_GPT = REPO_DIR / "reparto_gpt.py"
 SCRIPT_GEMINI = REPO_DIR / "reparto_gemini.py"
 
+# --- GESTIÓN DE SESIÓN ---
 def get_workdir():
     if "workdir" not in st.session_state:
-        st.session_state.workdir = Path(tempfile.mkdtemp(prefix="zaal_diag_"))
+        st.session_state.workdir = Path(tempfile.mkdtemp(prefix="zaal_strict_"))
     return Path(st.session_state.workdir)
 
 workdir = get_workdir()
 
-# --- MONITOR DE LOGS EN VIVO ---
-def ejecutar_con_consola(cmd, titulo):
-    st.write(f"### {titulo}")
-    consola = st.empty()
-    output_acumulado = ""
-    
-    process = subprocess.Popen(
-        cmd, cwd=str(workdir), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
-        text=True, bufsize=1, universal_newlines=True
-    )
-    
-    # Leemos la salida línea a línea mientras ocurre
-    for line in process.stdout:
-        output_acumulado += line
-        consola.code(output_acumulado) # Esto muestra el log en tiempo real
-        
-    rc = process.wait()
-    return rc
-
-# --- INTERFAZ ---
-with st.sidebar:
-    st.header("1. Entrada de Datos")
-    csv_file = st.file_uploader("Subir CSV de llegadas", type=["csv"])
+# --- 1. CARGA DEL ARCHIVO ---
+st.sidebar.header("📁 Paso 1: Carga")
+csv_file = st.sidebar.file_uploader("Sube el CSV de llegadas", type=["csv"])
 
 if csv_file:
-    # Guardar el archivo para el proceso
-    (workdir / "llegadas.csv").write_bytes(csv_file.getbuffer())
+    input_path = workdir / "llegadas.csv"
+    input_path.write_bytes(csv_file.getbuffer())
     
-    if st.button("📦 CLASIFICAR (FASE 1)", type="primary"):
-        # Verificación de archivos antes de empezar
-        if not SCRIPT_GPT.exists():
-            st.error(f"Error: No encuentro {SCRIPT_GPT}")
+    # --- 2. CLASIFICACIÓN (FASE 1) ---
+    st.sidebar.header("⚡ Paso 2: Clasificación")
+    if st.sidebar.button("Ejecutar Clasificación General"):
+        st.info("Iniciando Fase 1: Clasificando paquetes por zonas...")
+        log_area = st.empty()
+        
+        # Ejecutamos con monitor de salida para evitar cuelgues visuales
+        process = subprocess.Popen(
+            [sys.executable, str(SCRIPT_GPT), "--csv", "llegadas.csv", "--out", "salida.xlsx"],
+            cwd=str(workdir), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+        )
+        
+        output = ""
+        for line in process.stdout:
+            output += line
+            log_area.code(output) # Ves el progreso real aquí
+        
+        rc = process.wait()
+        if rc == 0:
+            st.session_state.fase1_completada = True
+            st.success("✅ Clasificación finalizada. Archivo 'salida.xlsx' generado.")
         else:
-            # Ejecución con monitor
-            rc = ejecutar_con_consola(
-                [sys.executable, str(SCRIPT_GPT), "--csv", "llegadas.csv", "--out", "salida.xlsx"],
-                "Monitor de Clasificación GPT"
-            )
-            
-            if rc == 0:
-                st.session_state.paso1_ok = True
-                st.success("✅ Clasificación terminada.")
-            else:
-                st.error("❌ La clasificación se ha detenido con errores.")
+            st.error("❌ Fallo en la Clasificación. Revisa los logs arriba.")
 
-# --- SELECCIÓN DE RUTA (Solo si el Paso 1 terminó) ---
-if st.session_state.get("paso1_ok"):
+# --- 3. SELECCIÓN MANUAL ---
+if st.session_state.get("fase1_completada"):
     st.divider()
+    st.subheader("🎯 Paso 3: Selección de Ruta")
+    
     try:
         xl = pd.ExcelFile(workdir / "salida.xlsx")
-        hojas = [h for h in xl.sheet_names if not any(x in h.upper() for x in ["METADATOS", "RESUMEN"])]
+        # Filtramos hojas que no son rutas
+        hojas_rutas = [h for h in xl.sheet_names if not any(x in h.upper() for x in ["METADATOS", "RESUMEN"])]
         
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            ruta_sel = st.selectbox("Ruta a optimizar:", hojas)
-        with col2:
-            idx = hojas.index(ruta_sel)
-            if st.button("🧠 OPTIMIZAR ESTA RUTA"):
-                rc_opt = ejecutar_con_consola(
-                    [sys.executable, str(SCRIPT_GEMINI), "--seleccion", str(idx), "--in", "salida.xlsx", "--out", "PLAN_FINAL.xlsx"],
-                    f"Optimizando {ruta_sel}..."
-                )
-                if rc_opt == 0:
-                    st.session_state.paso2_ok = True
-                    st.session_state.ruta_nombre = ruta_sel
-    except Exception as e:
-        st.error(f"Error leyendo el resultado: {e}")
+        col_sel, col_btn = st.columns([3, 1])
+        with col_sel:
+            ruta_seleccionada = st.selectbox("¿Qué ruta quieres optimizar ahora?", hojas_rutas)
+        
+        # --- 4. OPTIMIZACIÓN A PETICIÓN ---
+        with col_btn:
+            st.write("") # Espaciado
+            if st.button("🧠 Optimizar Ruta", type="primary"):
+                st.session_state.ruta_en_proceso = ruta_seleccionada
+                idx_hoja = hojas_rutas.index(ruta_seleccionada)
+                
+                with st.status(f"Optimizando {ruta_seleccionada}...", expanded=True) as status:
+                    cmd_gemini = [
+                        sys.executable, str(SCRIPT_GEMINI), 
+                        "--seleccion", str(idx_hoja), 
+                        "--in", "salida.xlsx", 
+                        "--out", "PLAN_UNICO.xlsx"
+                    ]
+                    res = subprocess.run(cmd_gemini, cwd=str(workdir), capture_output=True, text=True)
+                    
+                    if res.returncode == 0:
+                        st.session_state.fase2_completada = True
+                        status.update(label="✅ Optimización Geográfica lista", state="complete")
+                    else:
+                        st.error(f"Error en Fase 2: {res.stderr}")
 
-# --- RESULTADO FINAL ---
-if st.session_state.get("paso2_ok"):
+    except Exception as e:
+        st.error(f"Error al leer las rutas: {e}")
+
+# --- 5. RESULTADO (BOTONES MAPS) ---
+if st.session_state.get("fase2_completada"):
     st.divider()
-    df = pd.read_excel(workdir / "PLAN_FINAL.xlsx", sheet_name=st.session_state.ruta_nombre)
+    st.subheader(f"📍 Hoja de Ruta Optimizada: {st.session_state.ruta_en_proceso}")
     
-    c_dir = next((c for c in df.columns if "DIR" in str(c).upper()), None)
-    c_pob = next((c for c in df.columns if "POB" in str(c).upper()), "")
+    # Leemos la ruta ya optimizada (respetando el orden de la IA)
+    df_opt = pd.read_excel(workdir / "PLAN_UNICO.xlsx", sheet_name=st.session_state.ruta_en_proceso)
+    
+    # Buscamos columnas de dirección y población
+    c_dir = next((c for c in df_opt.columns if "DIR" in str(c).upper()), None)
+    c_pob = next((c for c in df_opt.columns if "POB" in str(c).upper()), "")
 
     if c_dir:
-        st.write(f"### 📍 Mapa de {st.session_state.ruta_nombre}")
-        direcciones = [urllib.parse.quote(f"{f[c_dir]}, {f[c_pob]}") for _, f in df.iterrows()]
+        # Preparamos las direcciones para los enlaces
+        direcciones = [urllib.parse.quote(f"{f[c_dir]}, {f[c_pob]}") for _, f in df_opt.iterrows()]
         
+        st.info(f"Se han generado {len(direcciones)} paradas siguiendo el hilo lógico de la carretera.")
+        
+        
+
+        # Generación de botones por tramos de 9
+        cols_maps = st.columns(3)
         for i in range(0, len(direcciones), 9):
             t = direcciones[i:i+9]
             origen = urllib.parse.quote("Vall d'Uxo, Castellon") if i == 0 else ""
-            url = f"http://googleusercontent.com/maps.google.com/{'0' if origen else '3'}{origen}&destination={t[-1]}&waypoints={'|'.join(t[:-1])}"
-            st.link_button(f"🚗 TRAMO {i//9 + 1}", url, use_container_width=True)
+            
+            # URL de Google Maps: 0 para origen fijo, 3 para ubicación actual
+            prefix = "0" if origen else "3"
+            url = f"http://googleusercontent.com/maps.google.com/{prefix}{origen}&destination={t[-1]}&waypoints={'|'.join(t[:-1])}"
+            
+            with cols_maps[(i//9) % 3]:
+                st.link_button(f"🚗 TRAMO {i//9 + 1}", url, use_container_width=True)
+                st.caption(f"De: {df_opt.iloc[i][c_dir]}")
+    else:
+        st.error("No se ha encontrado la columna de dirección en el archivo optimizado.")
