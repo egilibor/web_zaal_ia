@@ -22,7 +22,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.utils.dataframe import dataframe_to_rows
 
 
-WORKDIR = Path(r"C:\REPARTO")
+WORKDIR = Path(".")
 DEFAULT_CSV = str(WORKDIR / "llegadas.csv")
 DEFAULT_REGLAS = str(WORKDIR / "Reglas_hospitales.xlsx")
 DEFAULT_OUT = str(WORKDIR / "salida.xlsx")
