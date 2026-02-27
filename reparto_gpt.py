@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""
+AGENTE CASTELLÓN · SALIDA DIARIA (HOSPITALES + FEDERACIÓN + RESTO POR Z.REP)
+Versión v3 + Optimización determinista por pueblos
+"""
 
 from __future__ import annotations
 
@@ -18,25 +22,19 @@ from openpyxl.utils import get_column_letter
 from openpyxl.utils.dataframe import dataframe_to_rows
 
 
-# ============================================================
-# CONFIG
-# ============================================================
-
-WORKDIR = Path(".")
+WORKDIR = Path(r"C:\REPARTO")
 DEFAULT_CSV = str(WORKDIR / "llegadas.csv")
 DEFAULT_REGLAS = str(WORKDIR / "Reglas_hospitales.xlsx")
 DEFAULT_OUT = str(WORKDIR / "salida.xlsx")
 
-
 LIBRO_COORDS = Path(__file__).resolve().parent / "Libro_de_Servicio_Castellon_con_coordenadas.xlsx"
-
 ORIGEN_LAT = 39.804106
 ORIGEN_LON = -0.217351
 
 
-# ============================================================
+# =========================
 # UTILIDADES GENERALES
-# ============================================================
+# =========================
 
 def clean_text(x) -> str:
     if pd.isna(x):
@@ -44,6 +42,33 @@ def clean_text(x) -> str:
     s = str(x).strip()
     s = re.sub(r"\s+", " ", s)
     return s
+
+
+def parse_kg(x) -> float:
+    if pd.isna(x):
+        return 0.0
+    s = str(x).strip()
+    if s == "":
+        return 0.0
+    if re.search(r"\d+,\d+", s):
+        s = s.replace(".", "").replace(",", ".")
+    else:
+        s = s.replace(",", ".")
+    s = re.sub(r"[^0-9\.\-]", "", s)
+    try:
+        return float(s) if s != "" else 0.0
+    except Exception:
+        return 0.0
+
+
+def parse_int(x) -> int:
+    if pd.isna(x):
+        return 0
+    s = re.sub(r"[^0-9\-]", "", str(x))
+    try:
+        return int(s) if s != "" else 0
+    except Exception:
+        return 0
 
 
 def norm(s: str) -> str:
@@ -59,25 +84,9 @@ def norm(s: str) -> str:
     return s
 
 
-def safe_sheet_name(name: str, existing: set) -> str:
-    name = re.sub(r"[\\/*?:\[\]]", " ", str(name))
-    name = re.sub(r"\s+", " ", name).strip()
-    if not name:
-        name = "SIN_NOMBRE"
-    base = name[:31]
-    candidate = base
-    i = 2
-    while candidate in existing:
-        suffix = f" {i}"
-        candidate = (base[:31-len(suffix)] + suffix).strip()
-        i += 1
-    existing.add(candidate)
-    return candidate
-
-
-# ============================================================
-# COORDENADAS Y RUTA
-# ============================================================
+# =========================
+# OPTIMIZACIÓN RUTAS
+# =========================
 
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371
@@ -88,11 +97,10 @@ def haversine(lat1, lon1, lat2, lon2):
     return 2 * R * math.asin(math.sqrt(a))
 
 
-def build_pueblo_coords(libro_path: Path) -> dict:
-    df = pd.read_excel(libro_path)
+def build_pueblo_coords():
+    df = pd.read_excel(LIBRO_COORDS)
     df = df.dropna(subset=["PUEBLO", "Latitud", "Longitud"])
     df["PUEBLO_NORM"] = df["PUEBLO"].astype(str).apply(norm)
-
     return (
         df.groupby("PUEBLO_NORM")
         .agg({"Latitud": "mean", "Longitud": "mean"})
@@ -100,7 +108,7 @@ def build_pueblo_coords(libro_path: Path) -> dict:
     )
 
 
-def nearest_neighbor_route(pueblos: list[str], coords: dict) -> list[str]:
+def nearest_neighbor_route(pueblos, coords):
     remaining = pueblos.copy()
     route = []
     current_lat, current_lon = ORIGEN_LAT, ORIGEN_LON
@@ -115,7 +123,6 @@ def nearest_neighbor_route(pueblos: list[str], coords: dict) -> list[str]:
             lat = coords[p]["Latitud"]
             lon = coords[p]["Longitud"]
             dist = haversine(current_lat, current_lon, lat, lon)
-
             if dist < best_dist:
                 best = p
                 best_dist = dist
@@ -130,74 +137,3 @@ def nearest_neighbor_route(pueblos: list[str], coords: dict) -> list[str]:
         remaining.remove(best)
 
     return route
-
-
-# ============================================================
-# CORE
-# ============================================================
-
-def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str):
-
-    df = pd.read_csv(csv_path, sep=";", encoding="utf-8-sig", dtype=str)
-
-    df["Kgs"] = pd.to_numeric(df.get("Kgs", 0), errors="coerce").fillna(0)
-    df["Bultos"] = pd.to_numeric(df.get("Btos.", 0), errors="coerce").fillna(0)
-
-    resto_grp = (
-        df.groupby(["Z.Rep", "Población", "Dir_OK"], dropna=False)
-        .agg(
-            Expediciones=("Exp", "nunique"),
-            Bultos=("Bultos", "sum"),
-            Kilos=("Kgs", "sum"),
-        )
-        .reset_index()
-    )
-
-    resto_grp["Kilos"] = resto_grp["Kilos"].round(1)
-
-    wb_out = Workbook()
-    wb_out.remove(wb_out.active)
-
-    coords = build_pueblo_coords(LIBRO_COORDS)
-    existing = set()
-
-    for z, sub in resto_grp.groupby("Z.Rep"):
-
-        sheet_name = safe_sheet_name(f"ZREP_{z}", existing)
-        ws = wb_out.create_sheet(sheet_name)
-
-        out = sub.copy()
-        out["PUEBLO_NORM"] = out["Población"].apply(norm)
-
-        pueblos_unicos = list(dict.fromkeys(out["PUEBLO_NORM"].tolist()))
-        orden_pueblos = nearest_neighbor_route(pueblos_unicos, coords)
-        ranking = {p: i for i, p in enumerate(orden_pueblos)}
-
-        out["orden_pueblo"] = out["PUEBLO_NORM"].map(ranking).fillna(9999)
-        out = out.sort_values(["orden_pueblo"], kind="stable").reset_index(drop=True)
-
-        out.insert(0, "Parada", range(1, len(out) + 1))
-        out = out.drop(columns=["PUEBLO_NORM", "orden_pueblo"])
-
-        for row in dataframe_to_rows(out, index=False, header=True):
-            ws.append(row)
-
-    wb_out.save(out_path)
-
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--csv")
-    parser.add_argument("--reglas")
-    parser.add_argument("--out")
-    args = parser.parse_args()
-
-    csv_p = Path(args.csv) if args.csv else Path(DEFAULT_CSV)
-    reglas_p = Path(args.reglas) if args.reglas else Path(DEFAULT_REGLAS)
-    out_p = Path(args.out) if args.out else Path(DEFAULT_OUT)
-
-    run(csv_p, reglas_p, out_p, "LLEGADAS")
-
-
-if __name__ == "__main__":
-    main()
