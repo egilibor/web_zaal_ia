@@ -13,7 +13,6 @@ st.title("Reparto determinista (Streamlit)")
 # --- Paths en repo ---
 REPO_DIR = Path(__file__).resolve().parent
 SCRIPT_REPARTO = REPO_DIR / "reparto_gpt.py"
-SCRIPT_GEMINI = REPO_DIR / "reparto_gemini.py"
 REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
 
 # -------------------------
@@ -78,7 +77,6 @@ with st.sidebar:
 
     st.divider()
     st.write(f"GPT: `{SCRIPT_REPARTO.name}` exists = `{SCRIPT_REPARTO.exists()}`")
-    st.write(f"Gemini: `{SCRIPT_GEMINI.name}` exists = `{SCRIPT_GEMINI.exists()}`")
     st.write(f"Reglas: `{REGLAS_REPO.name}` exists = `{REGLAS_REPO.exists()}`")
 
     st.divider()
@@ -92,15 +90,12 @@ with st.sidebar:
 missing = []
 if not SCRIPT_REPARTO.exists():
     missing.append("reparto_gpt.py")
-if not SCRIPT_GEMINI.exists():
-    missing.append("reparto_gemini.py")
 if not REGLAS_REPO.exists():
     missing.append("Reglas_hospitales.xlsx")
 
 if missing:
     st.error(
-        "Faltan archivos en el repo desplegado: " + ", ".join(missing) + "\n\n"
-        "Revisa que estén en el branch desplegado (main) y en la misma carpeta que app.py."
+        "Faltan archivos en el repo desplegado: " + ", ".join(missing)
     )
     st.stop()
 
@@ -126,17 +121,13 @@ if opcion == "Asignación reparto":
         st.info("Sube el CSV para habilitar la ejecución.")
         st.stop()
 
-    # Guardar CSV en workdir
     csv_path = save_upload(csv_file, workdir / "llegadas.csv")
-
-    # Copiar reglas del repo al workdir (para que el script las encuentre fácil)
     (workdir / "Reglas_hospitales.xlsx").write_bytes(REGLAS_REPO.read_bytes())
 
-    st.subheader("2) Ejecutar (genera salida.xlsx y PLAN.xlsx)")
-    st.caption('Gemini se ejecuta automáticamente con --seleccion "1-9".')
+    st.subheader("2) Ejecutar (genera salida.xlsx)")
 
     if st.button("Ejecutar", type="primary"):
-        # ---- GPT ----
+
         cmd_gpt = [
             sys.executable,
             str(SCRIPT_REPARTO),
@@ -155,47 +146,15 @@ if opcion == "Asignación reparto":
 
         salida_path = workdir / "salida.xlsx"
         if not salida_path.exists():
-            st.error("Terminó sin error, pero no encuentro `salida.xlsx` en el workdir.")
+            st.error("Terminó sin error, pero no encuentro `salida.xlsx`.")
             show_logs(out, err)
             st.stop()
 
-        # ---- GEMINI (selección fija 1-9) ----
-        cmd_gemini = [
-            sys.executable,
-            str(SCRIPT_GEMINI),
-            "--seleccion", "1-9",
-            "--in", "salida.xlsx",
-            "--out", "PLAN.xlsx",
-        ]
+        st.success("✅ salida.xlsx generado")
 
-        with st.spinner('Ejecutando reparto_gemini.py (selección 1-9)…'):
-            rc2, out2, err2 = run_process(cmd_gemini, cwd=workdir, timeout_s=300)
-
-        if rc2 != 0:
-            st.error("❌ Falló reparto_gemini.py")
-            show_logs(out2, err2)
-            st.stop()
-
-        plan_path = workdir / "PLAN.xlsx"
-        if not plan_path.exists():
-            st.error("Terminó sin error, pero no encuentro `PLAN.xlsx` en el workdir.")
-            show_logs(out2, err2)
-            st.stop()
-
-        st.success("✅ Archivos generados: salida.xlsx y PLAN.xlsx")
-
-        col_a, col_b = st.columns(2, gap="large")
-        with col_a:
-            st.download_button(
-                "Descargar salida.xlsx",
-                data=salida_path.read_bytes(),
-                file_name="salida.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
-        with col_b:
-            st.download_button(
-                "Descargar PLAN.xlsx",
-                data=plan_path.read_bytes(),
-                file_name="PLAN.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
+        st.download_button(
+            "Descargar salida.xlsx",
+            data=salida_path.read_bytes(),
+            file_name="salida.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
