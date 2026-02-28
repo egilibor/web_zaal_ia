@@ -50,12 +50,14 @@ def cargar_coordenadas(ruta: Path) -> dict:
 
     columnas_necesarias = {"PUEBLO", "Latitud", "Longitud"}
     if not columnas_necesarias.issubset(df.columns):
-        raise ValueError("El archivo de coordenadas no tiene las columnas requeridas.")
+        raise ValueError(
+            f"Columnas detectadas: {list(df.columns)}"
+        )
 
     coords = {}
 
     for _, row in df.iterrows():
-        pueblo = normalizar_texto(row["Población"])
+        pueblo = normalizar_texto(row["PUEBLO"])
         lat = row["Latitud"]
         lon = row["Longitud"]
 
@@ -148,4 +150,5 @@ def reordenar_excel(input_path: Path, output_path: Path, ruta_coordenadas: Path)
         for nombre, df in hojas_resultado.items():
 
             df.to_excel(writer, sheet_name=nombre, index=False)
+
 
