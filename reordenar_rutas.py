@@ -48,18 +48,23 @@ def normalizar_texto(txt: str) -> str:
 def cargar_coordenadas(ruta: Path) -> dict:
     df = pd.read_excel(ruta)
 
-    columnas_necesarias = {"PUEBLO", "Latitud", "Longitud"}
-    if not columnas_necesarias.issubset(df.columns):
+    # Normalizar cabeceras: quitar espacios y pasar a mayúsculas
+    df.columns = df.columns.str.strip().str.upper()
+
+    columnas_necesarias = {"PUEBLO", "LATITUD", "LONGITUD"}
+
+    if not columnas_necesarias.issubset(set(df.columns)):
         raise ValueError(
-            f"Columnas detectadas: {list(df.columns)}"
+            f"Columnas detectadas: {list(df.columns)}. "
+            "Se esperaban: PUEBLO, LATITUD, LONGITUD."
         )
 
     coords = {}
 
     for _, row in df.iterrows():
         pueblo = normalizar_texto(row["PUEBLO"])
-        lat = row["Latitud"]
-        lon = row["Longitud"]
+        lat = row["LATITUD"]
+        lon = row["LONGITUD"]
 
         if pd.notna(pueblo) and pd.notna(lat) and pd.notna(lon):
             coords[pueblo] = (float(lat), float(lon))
@@ -150,5 +155,6 @@ def reordenar_excel(input_path: Path, output_path: Path, ruta_coordenadas: Path)
         for nombre, df in hojas_resultado.items():
 
             df.to_excel(writer, sheet_name=nombre, index=False)
+
 
 
