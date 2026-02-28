@@ -335,89 +335,65 @@ def load_csv(csv_path: Path) -> pd.DataFrame:
     df["Dir_norm"] = df["Dirección"].apply(norm)
     return df
 
-def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
+    def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
+
     df = load_csv(csv_path)
 
     wb_rules = load_workbook(reglas_path, data_only=True)
     rules_h = sheet_to_df(wb_rules, "REGLAS_HOSPITALES")
     rules_f = sheet_to_df(wb_rules, "REGLAS_FEDERACION")
-    if rules_h.empty or rules_f.empty:
-        raise ValueError("El Excel de reglas debe contener REGLAS_HOSPITALES y REGLAS_FEDERACION.")
 
     rules_h_prep = prepare_rules(rules_h, pob_col="Población", pat_col="Patrón_dirección")
-    rules_h_prep["Hospital_final"] = rules_h_prep.get("Hospital_final", "").astype(str).replace({"None":"", "nan":""})
-
     rules_f_prep = prepare_rules(rules_f, pob_col="Población", pat_col="Patrón_dirección")
 
     df["is_hospital"] = False
-    df["Hospital"] = ""
+    df["is_fed"] = False
+
     for i, r in df.iterrows():
-        ok, tag = match_rules(r["Pob_norm"], r["Dir_norm"], rules_h_prep, tag_field="Hospital_final")
-        if ok:
+        ok_h, tag = match_rules(r["Pob_norm"], r["Dir_norm"], rules_h_prep, tag_field="Hospital_final")
+        ok_f, _ = match_rules(r["Pob_norm"], r["Dir_norm"], rules_f_prep)
+
+        if ok_h:
             df.at[i, "is_hospital"] = True
             df.at[i, "Hospital"] = tag
 
-    df["is_fed"] = False
-    for i, r in df.iterrows():
-        ok, _ = match_rules(r["Pob_norm"], r["Dir_norm"], rules_f_prep, tag_field=None)
-        if ok:
+        if ok_f:
             df.at[i, "is_fed"] = True
 
     df["is_any_special"] = df["is_hospital"] | df["is_fed"]
 
     hosp = df[df["is_hospital"]].copy()
-    hosp = hosp.sort_values(["Hospital", "Población", "Dirección"], kind="stable").reset_index(drop=True)
-
     fed = df[df["is_fed"]].copy()
-    fed = fed.sort_values(["Población", "Dirección"], kind="stable").reset_index(drop=True)  
-
     resto = df[~df["is_any_special"]].copy()
-    resto_grp = (
-        resto.groupby(["Z.Rep", "Parada_key"], dropna=False)
-        .agg(
-            Población=("Población", "first"),
-            Dirección=("Dirección", "first"),
-            Consignatarios=("Consignatario", lambda s: unique_join(list(s))),
-            Expediciones=("Exp", lambda s: s.nunique()),
-            Bultos=("Bultos", "sum"),
-            Kilos=("Kgs", "sum"),
-            N_servicio=("N_servicio", lambda s: unique_join(list(s), sep=" | ")),
-        )
-        .reset_index()
-    )
-    resto_grp["Kilos"] = resto_grp["Kilos"].round(1)
 
     resto_summary = (
-        resto_grp.groupby("Z.Rep")
+        resto.groupby("Z.Rep")
         .agg(
             Paradas=("Parada_key", "nunique"),
-            Expediciones=("Expediciones", "sum"),
+            Expediciones=("Exp", "nunique"),
             Bultos=("Bultos", "sum"),
-            Kilos=("Kilos", "sum"),
+            Kilos=("Kgs", "sum"),
         )
         .reset_index()
-        .sort_values("Z.Rep")
     )
-    resto_summary["Kilos"] = resto_summary["Kilos"].round(1)
 
     overview = pd.DataFrame(
         {
             "Bloque": ["HOSPITALES", "FEDERACION", "RESTO (todas rutas)"],
-            "Paradas": [len(hosp), len(fed), resto_grp["Parada_key"].nunique()],
+            "Paradas": [len(hosp), len(fed), resto["Parada_key"].nunique()],
             "Expediciones": [
-                int(df[df["is_hospital"]]["Exp"].nunique()),
-                int(df[df["is_fed"]]["Exp"].nunique()),
-                int(resto["Exp"].nunique()),
+                hosp["Exp"].nunique(),
+                fed["Exp"].nunique(),
+                resto["Exp"].nunique(),
             ],
             "Kilos": [
-                round(float(df[df["is_hospital"]]["Kgs"].sum()), 1),
-                round(float(df[df["is_fed"]]["Kgs"].sum()), 1),
-                round(float(resto["Kgs"].sum()), 1),
+                round(hosp["Kgs"].sum(), 1),
+                round(fed["Kgs"].sum(), 1),
+                round(resto["Kgs"].sum(), 1),
             ],
         }
     )
 
-    # RESUMEN_UNICO = GENERAL + RESTO desglosado
     resumen_unico_general = overview[overview["Bloque"].ne("RESTO (todas rutas)")].copy()
     resumen_unico_general.insert(0, "Tipo", "GENERAL")
     resumen_unico_general = resumen_unico_general.rename(columns={"Bloque": "Clave"})
@@ -438,21 +414,13 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
         ignore_index=True
     )
 
+    # --------------------------------------------------
+    # CREAR WORKBOOK
+    # --------------------------------------------------
 
     wb_out = Workbook()
     wb_out.remove(wb_out.active)
-    COLUMNAS_BASE = [
-        "Exp",
-        "Hospital",
-        "Población",
-        "Dirección",
-        "Consignatario",
-        "Cliente",
-        "Kgs",
-        "Bultos",
-        "Z.Rep",
-        "N_servicio",
-    ]
+
     meta = pd.DataFrame(
         {
             "Clave": ["Origen de datos", "CSV", "Reglas", "Generado"],
@@ -468,6 +436,53 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     add_df_sheet(wb_out, "METADATOS", meta, widths=[6, 22, 90])
     add_df_sheet(wb_out, "RESUMEN_GENERAL", overview, widths=[6, 22, 12, 14, 12])
     add_df_sheet(wb_out, "RESUMEN_UNICO", resumen_unico, widths=[6, 12, 28, 12, 14, 12, 12])
+
+    add_df_sheet(wb_out, "HOSPITALES", hosp, widths=[10]*10)
+    add_df_sheet(wb_out, "FEDERACION", fed, widths=[10]*10)
+    add_df_sheet(wb_out, "RESUMEN_RUTAS_RESTO", resto_summary, widths=[6, 18, 10, 14, 12, 12])
+
+    existing = set(wb_out.sheetnames)
+
+    for z, sub in resto.groupby("Z.Rep"):
+        sheet_name = safe_sheet_name(f"ZREP_{z}", existing)
+        add_df_sheet(wb_out, sheet_name, sub, widths=[10]*10)
+
+    # --------------------------------------------------
+    # ESCRIBIR FÓRMULAS EN RESUMEN_UNICO (AL FINAL)
+    # --------------------------------------------------
+
+    ws_res = wb_out["RESUMEN_UNICO"]
+    fila = 2
+
+    while ws_res[f"B{fila}"].value not in (None, ""):
+
+        clave = str(ws_res[f"B{fila}"].value).strip()
+        nombre_hoja = None
+
+        if clave == "HOSPITALES":
+            nombre_hoja = "HOSPITALES"
+
+        elif clave == "FEDERACION":
+            nombre_hoja = "FEDERACION"
+
+        else:
+            if "." in clave:
+                numero = clave.split(".")[0].strip()
+                if numero.isdigit():
+                    nombre_hoja = f"ZREP_{numero}"
+
+        if nombre_hoja:
+            ws_res[f"G{fila}"] = f"=SUM('{nombre_hoja}'!G:G)"
+
+        fila += 1
+
+    # --------------------------------------------------
+    # GUARDAR UNA SOLA VEZ
+    # --------------------------------------------------
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    wb_out.save(out_path)
+
     
     # -------------------------
     # Convertir columna Kilos (columna G) en fórmulas dinámicas
