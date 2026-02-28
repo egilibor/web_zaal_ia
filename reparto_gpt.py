@@ -469,7 +469,6 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     while ws_res[f"B{fila}"].value not in (None, ""):
 
         clave = str(ws_res[f"B{fila}"].value).strip()
-        nombre_hoja = None
 
         if clave == "HOSPITALES":
             nombre_hoja = "HOSPITALES"
@@ -478,15 +477,12 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
             nombre_hoja = "FEDERACION"
 
         else:
-            if "." in clave:
-                numero = clave.split(".")[0].strip()
-                if numero.isdigit():
-                    nombre_hoja = f"ZREP_{numero}"
+            # La hoja real es exactamente ZREP_{clave}
+            nombre_hoja = f"ZREP_{clave}"
 
-        if nombre_hoja:
-            ws_res[f"G{fila}"] = f"=SUM('{nombre_hoja}'!G:G)"
+        ws_res[f"G{fila}"] = f"=SUM('{nombre_hoja}'!G:G)"
 
-        fila += 1
+        fila += 1    
 
     # --------------------------------------------------
     # GUARDAR UNA SOLA VEZ
