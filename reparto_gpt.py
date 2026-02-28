@@ -338,7 +338,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     overview = pd.DataFrame(
         {
             "Bloque": ["HOSPITALES", "FEDERACION", "RESTO (todas rutas)"],
-            "Paradas": [len(hosp), len(fed), resto_grp["Parada_key"].nunique()],
+            "Paradas": [len(hosp), len(fed), resto["Parada_key"].nunique()],
             "Expediciones": [
                 int(df[df["is_hospital"]]["Exp"].nunique()),
                 int(df[df["is_fed"]]["Exp"].nunique()),
