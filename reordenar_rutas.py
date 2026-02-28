@@ -162,7 +162,90 @@ def ordenar_dataframe_zrep(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
 
     return df_ordenado
 
+# -------------------
+# ORDENAR HOSPITALES
+# -------------------
 
+def ordenar_hospitales(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
+
+    df = df.copy()
+    df["_orden_original"] = range(len(df))
+
+    # Crear clave de parada
+    df["_clave_parada"] = (
+        df["Consignatario"].apply(normalizar_texto)
+        + "|"
+        + df["Dirección"].apply(normalizar_texto)
+    )
+
+    # Agrupar paradas
+    paradas = {}
+
+    for idx, row in df.iterrows():
+        clave = row["_clave_parada"]
+        if clave not in paradas:
+            paradas[clave] = {
+                "indices": [],
+                "poblacion": normalizar_texto(row["Población"]),
+            }
+        paradas[clave]["indices"].append(idx)
+
+    # Separar paradas con y sin coordenadas
+    paradas_con_coord = []
+    paradas_sin_coord = []
+
+    for clave, data in paradas.items():
+        pueblo = data["poblacion"]
+
+        if pueblo in coords:
+            lat, lon = coords[pueblo]
+            paradas_con_coord.append((clave, lat, lon))
+        else:
+            paradas_sin_coord.append(clave)
+
+    # Vecino más cercano entre paradas
+    orden_paradas = []
+    lat_actual = LAT0
+    lon_actual = LON0
+    restantes = paradas_con_coord.copy()
+
+    while restantes:
+
+        distancias = []
+        for clave, lat, lon in restantes:
+            d = (lat - lat_actual) ** 2 + (lon - lon_actual) ** 2
+            distancias.append((d, clave, lat, lon))
+
+        distancias.sort(key=lambda x: x[0])
+        d_min, clave_sel, lat_sel, lon_sel = distancias[0]
+
+        orden_paradas.append(clave_sel)
+
+        lat_actual = lat_sel
+        lon_actual = lon_sel
+
+        restantes = [r for r in restantes if r[0] != clave_sel]
+
+    # Añadir sin coordenadas al final
+    orden_paradas.extend(paradas_sin_coord)
+
+    # Reconstruir dataframe final
+    orden_indices = []
+
+    for clave in orden_paradas:
+        indices = paradas[clave]["indices"]
+        indices_ordenados = sorted(
+            indices,
+            key=lambda i: df.loc[i, "_orden_original"]
+        )
+        orden_indices.extend(indices_ordenados)
+
+    df_final = df.loc[orden_indices].drop(
+        columns=["_orden_original", "_clave_parada"]
+    )
+
+    return df_final
+    
 # -------------------------------------------------
 # FUNCIÓN PRINCIPAL
 # -------------------------------------------------
@@ -180,13 +263,19 @@ def reordenar_excel(input_path: Path, output_path: Path, ruta_coordenadas: Path)
         if nombre.startswith("ZREP_"):
             df_ordenado = ordenar_dataframe_zrep(df, coords)
             hojas_resultado[nombre] = df_ordenado
+        
+        elif nombre == "HOSPITALES":
+            df_ordenado = ordenar_hospitales(df, coords)
+            hojas_resultado[nombre] = df_ordenado
+        
         else:
-            hojas_resultado[nombre] = df
+            hojas_resultado[nombre] = df 
 
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
         for nombre, df in hojas_resultado.items():
 
             df.to_excel(writer, sheet_name=nombre, index=False)
+
 
 
 
