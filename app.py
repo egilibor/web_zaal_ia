@@ -6,7 +6,6 @@ import subprocess
 from pathlib import Path
 
 import streamlit as st
-
 from reordenar_rutas import reordenar_excel
 
 
@@ -15,12 +14,11 @@ from reordenar_rutas import reordenar_excel
 # ==========================================================
 
 st.set_page_config(page_title="Reparto determinista", layout="wide")
-st.title("Reparto determinista (Streamlit)")
+st.title("Reparto determinista")
 
 REPO_DIR = Path(__file__).resolve().parent
 SCRIPT_REPARTO = REPO_DIR / "reparto_gpt.py"
 REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
-COORDENADAS_REPO = REPO_DIR / "Libro_de_Servicio_Castellon_con_coordenadas.xlsx"
 
 
 # ==========================================================
@@ -47,7 +45,7 @@ def save_upload(uploaded_file, dst: Path) -> Path:
     return dst
 
 
-def run_process(cmd: list[str], cwd: Path, timeout_s: int = 300) -> tuple[int, str, str]:
+def run_process(cmd: list[str], cwd: Path, timeout_s: int = 300):
     try:
         p = subprocess.run(
             cmd,
@@ -58,64 +56,22 @@ def run_process(cmd: list[str], cwd: Path, timeout_s: int = 300) -> tuple[int, s
         )
         return p.returncode, p.stdout, p.stderr
     except subprocess.TimeoutExpired as e:
-        stdout = e.stdout or ""
-        stderr = e.stderr or ""
-        return 124, stdout, f"TIMEOUT tras {timeout_s}s\n{stderr}"
-
-
-def show_logs(stdout: str, stderr: str):
-    if stdout.strip():
-        st.subheader("STDOUT")
-        st.code(stdout)
-    if stderr.strip():
-        st.subheader("STDERR")
-        st.code(stderr)
+        return 124, e.stdout or "", f"TIMEOUT tras {timeout_s}s"
 
 
 # ==========================================================
-# ESTADO (SIDEBAR)
+# ESTADO
 # ==========================================================
 
 workdir = ensure_workdir()
 
 with st.sidebar:
-    st.header("Estado")
-    st.write(f"Run: `{st.session_state.run_id}`")
+    st.header("Estado sesión")
+    st.write(f"Run ID: `{st.session_state.run_id}`")
     st.write(f"Workdir: `{workdir}`")
-    st.write(f"Repo dir: `{REPO_DIR}`")
-    st.write(f"Python: `{sys.executable}`")
-
-    st.divider()
-    st.write(f"reparto_gpt.py = `{SCRIPT_REPARTO.exists()}`")
-    st.write(f"Reglas_hospitales.xlsx = `{REGLAS_REPO.exists()}`")
-    st.write(f"Libro coordenadas = `{COORDENADAS_REPO.exists()}`")
-
-    st.divider()
     if st.button("Reset sesión"):
         reset_session_dir()
         st.rerun()
-
-
-# ==========================================================
-# VERIFICACIONES DURAS
-# ==========================================================
-
-missing = []
-
-if not SCRIPT_REPARTO.exists():
-    missing.append("reparto_gpt.py")
-
-if not REGLAS_REPO.exists():
-    missing.append("Reglas_hospitales.xlsx")
-
-if not COORDENADAS_REPO.exists():
-    missing.append("Libro_de_Servicio_Castellon_con_coordenadas.xlsx")
-
-if missing:
-    st.error("Faltan archivos en el repo desplegado: " + ", ".join(missing))
-    st.stop()
-
-st.divider()
 
 
 # ==========================================================
@@ -131,7 +87,7 @@ tab_fase1, tab_fase2 = st.tabs(
 
 
 # ==========================================================
-# FASE 1 · ASIGNACIÓN REPARTO
+# FASE 1
 # ==========================================================
 
 with tab_fase1:
@@ -144,85 +100,91 @@ with tab_fase1:
         key="fase1_csv"
     )
 
-    st.divider()
+    if csv_file:
 
-    if not csv_file:
-        st.info("Sube el CSV para habilitar la ejecución.")
-        st.stop()
+        csv_path = save_upload(csv_file, workdir / "llegadas.csv")
 
-    csv_path = save_upload(csv_file, workdir / "llegadas.csv")
-    (workdir / "Reglas_hospitales.xlsx").write_bytes(REGLAS_REPO.read_bytes())
+        if REGLAS_REPO.exists():
+            (workdir / "Reglas_hospitales.xlsx").write_bytes(REGLAS_REPO.read_bytes())
+        else:
+            st.error("No se encuentra Reglas_hospitales.xlsx en el repo.")
+        
+        st.subheader("2) Ejecutar")
 
-    st.subheader("2) Ejecutar (genera salida.xlsx)")
+        if st.button("Generar salida.xlsx", type="primary", key="fase1_btn"):
 
-    if st.button("Ejecutar", type="primary", key="fase1_btn"):
+            cmd = [
+                sys.executable,
+                str(SCRIPT_REPARTO),
+                "--csv", "llegadas.csv",
+                "--reglas", "Reglas_hospitales.xlsx",
+                "--out", "salida.xlsx",
+            ]
 
-        cmd_gpt = [
-            sys.executable,
-            str(SCRIPT_REPARTO),
-            "--csv", "llegadas.csv",
-            "--reglas", "Reglas_hospitales.xlsx",
-            "--out", "salida.xlsx",
-        ]
+            with st.spinner("Ejecutando reparto_gpt.py…"):
+                rc, out, err = run_process(cmd, cwd=workdir)
 
-        with st.spinner("Ejecutando reparto_gpt.py…"):
-            rc, out, err = run_process(cmd_gpt, cwd=workdir, timeout_s=300)
+            if rc != 0:
+                st.error("Error en reparto_gpt.py")
+                st.code(err)
+            else:
+                salida_path = workdir / "salida.xlsx"
 
-        if rc != 0:
-            st.error("❌ Falló reparto_gpt.py")
-            show_logs(out, err)
-            st.stop()
+                if salida_path.exists():
+                    st.success("Archivo generado correctamente")
 
-        salida_path = workdir / "salida.xlsx"
-
-        if not salida_path.exists():
-            st.error("Terminó sin error, pero no encuentro `salida.xlsx`.")
-            show_logs(out, err)
-            st.stop()
-
-        st.success("✅ salida.xlsx generado")
-
-        st.download_button(
-            "Descargar salida.xlsx",
-            data=salida_path.read_bytes(),
-            file_name="salida.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
+                    st.download_button(
+                        "Descargar salida.xlsx",
+                        data=salida_path.read_bytes(),
+                        file_name="salida.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+                else:
+                    st.error("No se generó salida.xlsx")
+    else:
+        st.info("Sube un CSV para habilitar la ejecución.")
 
 
 # ==========================================================
-# FASE 2 · REORDENACIÓN TOPOGRÁFICA
+# FASE 2
 # ==========================================================
 
 with tab_fase2:
 
     st.subheader("Reordenar rutas existentes")
 
-    archivo_modificado = st.file_uploader(
-        "Subir salida.xlsx modificado",
+    archivo_excel = st.file_uploader(
+        "1) Subir salida.xlsx modificado",
         type=["xlsx"],
-        key="fase2_uploader"
+        key="fase2_excel"
     )
 
-    if archivo_modificado:
-    
-        input_path = save_upload(archivo_modificado, workdir / "entrada_fase2.xlsx")
+    archivo_coords = st.file_uploader(
+        "2) Subir archivo de coordenadas",
+        type=["xlsx"],
+        key="fase2_coords"
+    )
+
+    if archivo_excel and archivo_coords:
+
+        input_path = save_upload(archivo_excel, workdir / "entrada_fase2.xlsx")
+        coords_path = save_upload(archivo_coords, workdir / "coords.xlsx")
         output_path = workdir / "salida_reordenada.xlsx"
-    
+
         if st.button("Reordenar rutas", type="primary", key="fase2_btn"):
-    
+
             try:
                 reordenar_excel(
                     input_path=input_path,
                     output_path=output_path,
-                    ruta_coordenadas=COORDENADAS_REPO,
+                    ruta_coordenadas=coords_path,
                 )
             except Exception as e:
                 st.error(f"Error en reordenación: {e}")
             else:
                 if output_path.exists():
-                    st.success("✅ Rutas reordenadas correctamente")
-    
+                    st.success("Rutas reordenadas correctamente")
+
                     st.download_button(
                         "Descargar salida_reordenada.xlsx",
                         data=output_path.read_bytes(),
@@ -230,35 +192,6 @@ with tab_fase2:
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     )
                 else:
-                    st.error("No se generó el archivo reordenado.")
+                    st.error("No se generó el archivo de salida.")
     else:
-        st.info("Sube el archivo para habilitar la reordenación.")
-    
-    input_path = save_upload(archivo_modificado, workdir / "entrada_fase2.xlsx")
-    output_path = workdir / "salida_reordenada.xlsx"
-
-    if st.button("Reordenar rutas", type="primary", key="fase2_btn"):
-
-        try:
-            reordenar_excel(
-                input_path=input_path,
-                output_path=output_path,
-                ruta_coordenadas=COORDENADAS_REPO,
-            )
-        except Exception as e:
-            st.error(f"Error en reordenación: {e}")
-            st.stop()
-
-        if not output_path.exists():
-            st.error("No se generó el archivo reordenado.")
-            st.stop()
-
-        st.success("✅ Rutas reordenadas correctamente")
-
-        st.download_button(
-            "Descargar salida_reordenada.xlsx",
-            data=output_path.read_bytes(),
-            file_name="salida_reordenada.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-
+        st.info("Sube ambos archivos para habilitar la reordenación.")
