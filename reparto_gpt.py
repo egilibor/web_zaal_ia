@@ -226,7 +226,7 @@ def safe_sheet_name(name: str, existing: set) -> str:
 def add_df_sheet(wb: Workbook, name: str, df_sheet: pd.DataFrame, widths: List[int]) -> None:
     ws = wb.create_sheet(title=name)
     out = df_sheet.copy()
-    out.insert(0, "Nº", range(1, len(out) + 1))
+
     for row in dataframe_to_rows(out, index=False, header=True):
         ws.append(row)
     style_sheet(ws)
