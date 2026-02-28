@@ -1,6 +1,8 @@
+import sys
 import uuid
 import shutil
 import tempfile
+import subprocess
 from pathlib import Path
 
 import streamlit as st
@@ -14,6 +16,12 @@ from reordenar_rutas import reordenar_excel
 st.set_page_config(page_title="Reparto determinista", layout="wide")
 st.title("Reparto determinista")
 
+REPO_DIR = Path(__file__).resolve().parent
+SCRIPT_REPARTO = REPO_DIR / "reparto_gpt.py"
+REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
+COORDENADAS_REPO = REPO_DIR / "Libro_de_Servicio_Castellon_con_coordenadas.xlsx"
+
+
 # ==========================================================
 # WORKDIR
 # ==========================================================
@@ -26,6 +34,7 @@ workdir = st.session_state.workdir
 
 with st.sidebar:
     st.write(f"Run ID: {st.session_state.run_id}")
+    st.write(f"Workdir: {workdir}")
     if st.button("Reset sesión"):
         shutil.rmtree(workdir, ignore_errors=True)
         st.session_state.workdir = Path(tempfile.mkdtemp(prefix="reparto_"))
@@ -44,62 +53,110 @@ tab1, tab2 = st.tabs([
 
 
 # ==========================================================
-# FASE 1 (SOLO VISUAL PARA PRUEBA)
+# FASE 1
 # ==========================================================
 
 with tab1:
-    st.write("FASE 1 ACTIVA")
-    st.info("Prueba visual. Sin ejecución real.")
+
+    st.subheader("Subir CSV de llegadas")
+
+    csv_file = st.file_uploader(
+        "CSV de llegadas",
+        type=["csv"],
+        key="fase1_csv"
+    )
+
+    if csv_file:
+
+        input_csv = workdir / "llegadas.csv"
+        input_csv.write_bytes(csv_file.getbuffer())
+
+        (workdir / "Reglas_hospitales.xlsx").write_bytes(
+            REGLAS_REPO.read_bytes()
+        )
+
+        if st.button("Generar salida.xlsx", key="fase1_btn"):
+
+            cmd = [
+                sys.executable,
+                str(SCRIPT_REPARTO),
+                "--csv", "llegadas.csv",
+                "--reglas", "Reglas_hospitales.xlsx",
+                "--out", "salida.xlsx",
+            ]
+
+            with st.spinner("Ejecutando reparto_gpt.py…"):
+                p = subprocess.run(
+                    cmd,
+                    cwd=str(workdir),
+                    capture_output=True,
+                    text=True,
+                )
+
+            if p.returncode != 0:
+                st.error("Error en reparto_gpt.py")
+                st.code(p.stderr)
+            else:
+                salida = workdir / "salida.xlsx"
+                if salida.exists():
+                    st.success("Archivo generado correctamente")
+
+                    st.download_button(
+                        "Descargar salida.xlsx",
+                        data=salida.read_bytes(),
+                        file_name="salida.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+                else:
+                    st.error("No se generó salida.xlsx")
+    else:
+        st.info("Sube un CSV para habilitar la ejecución.")
 
 
 # ==========================================================
-# FASE 2 (PRUEBA REAL)
+# FASE 2
 # ==========================================================
 
 with tab2:
 
-    st.write("FASE 2 ACTIVA")
+    st.subheader("Reordenar rutas existentes")
 
     archivo_excel = st.file_uploader(
-        "1) Subir salida.xlsx modificado",
+        "Subir salida.xlsx modificado",
         type=["xlsx"],
-        key="excel"
+        key="fase2_excel"
     )
 
-    archivo_coords = st.file_uploader(
-        "2) Subir archivo de coordenadas",
-        type=["xlsx"],
-        key="coords"
-    )
+    if archivo_excel:
 
-    if archivo_excel and archivo_coords:
-
-        input_path = workdir / "entrada.xlsx"
-        coords_path = workdir / "coords.xlsx"
+        input_path = workdir / "entrada_fase2.xlsx"
         output_path = workdir / "salida_reordenada.xlsx"
 
         input_path.write_bytes(archivo_excel.getbuffer())
-        coords_path.write_bytes(archivo_coords.getbuffer())
 
-        if st.button("Reordenar rutas"):
+        if st.button("Reordenar rutas", key="fase2_btn"):
 
             try:
                 reordenar_excel(
                     input_path=input_path,
                     output_path=output_path,
-                    ruta_coordenadas=coords_path,
+                    ruta_coordenadas=COORDENADAS_REPO,
                 )
-                st.success("Reordenación completada")
 
                 if output_path.exists():
+                    st.success("Rutas reordenadas correctamente")
+
                     st.download_button(
                         "Descargar salida_reordenada.xlsx",
                         data=output_path.read_bytes(),
                         file_name="salida_reordenada.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     )
+                else:
+                    st.error("No se generó el archivo reordenado.")
 
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Error en reordenación: {e}")
+
     else:
-        st.info("Sube ambos archivos para activar la reordenación.")
+        st.info("Sube el archivo para activar la reordenación.")
