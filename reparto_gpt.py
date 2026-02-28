@@ -467,6 +467,37 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     add_df_sheet(wb_out, "METADATOS", meta, widths=[6, 22, 90])
     add_df_sheet(wb_out, "RESUMEN_GENERAL", overview, widths=[6, 22, 12, 14, 12])
     add_df_sheet(wb_out, "RESUMEN_UNICO", resumen_unico, widths=[6, 12, 28, 12, 14, 12, 12])
+
+
+# ---- NORMALIZAR HOSPITALES ----
+for col in COLUMNAS_BASE:
+    if col not in hosp.columns:
+        hosp[col] = ""
+
+hosp = hosp[COLUMNAS_BASE]
+
+# ---- NORMALIZAR FEDERACION ----
+for col in COLUMNAS_BASE:
+    if col not in fed.columns:
+        fed[col] = ""
+
+fed = fed[COLUMNAS_BASE]
+
+add_df_sheet(
+    wb_out,
+    "HOSPITALES",
+    hosp,
+    widths=[10, 20, 18, 55, 25, 12, 10, 10],
+)
+
+add_df_sheet(
+    wb_out,
+    "FEDERACION",
+    fed,
+    widths=[6, 18, 55, 70, 16, 12],
+)
+
+add_df_sheet(wb_out, "RESUMEN_RUTAS_RESTO", resto_summary, widths=[6, 18, 10, 14, 12, 12])    
     add_df_sheet(
         wb_out,
         "HOSPITALES",
