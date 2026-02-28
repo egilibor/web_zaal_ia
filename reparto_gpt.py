@@ -496,6 +496,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
         out["orden_pueblo"] = out["PUEBLO_NORM"].map(ranking).fillna(9999)
         out = out.sort_values(["orden_pueblo"], kind="stable").reset_index(drop=True)
         out = out.drop(columns=["PUEBLO_NORM", "orden_pueblo"])
+        out = out[COLUMNAS_BASE]
     
         for row in dataframe_to_rows(out, index=False, header=True):
             ws.append(row)
