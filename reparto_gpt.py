@@ -469,40 +469,40 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     add_df_sheet(wb_out, "RESUMEN_GENERAL", overview, widths=[6, 22, 12, 14, 12])
     add_df_sheet(wb_out, "RESUMEN_UNICO", resumen_unico, widths=[6, 12, 28, 12, 14, 12, 12])
     
-   # -------------------------
-   # Convertir columna Kilos (columna G) en fórmulas dinámicas
-   # -------------------------
+    # -------------------------
+    # Convertir columna Kilos (columna G) en fórmulas dinámicas
+    # -------------------------
 
-   if "RESUMEN_UNICO" in wb_out.sheetnames:
+    if "RESUMEN_UNICO" in wb_out.sheetnames:
     
-       ws_res = wb_out["RESUMEN_UNICO"]
+        ws_res = wb_out["RESUMEN_UNICO"]
     
-       fila = 2  # cabecera en fila 1
+        fila = 2  # cabecera en fila 1
     
-       while ws_res[f"B{fila}"].value:
+        while ws_res[f"B{fila}"].value:
     
-           tipo = ws_res[f"A{fila}"].value
-           clave = ws_res[f"B{fila}"].value
+            tipo = ws_res[f"A{fila}"].value
+            clave = ws_res[f"B{fila}"].value
     
-           nombre_hoja = None
+            nombre_hoja = None
     
-           if clave == "HOSPITALES":
-               nombre_hoja = "HOSPITALES"
+            if clave == "HOSPITALES":
+                nombre_hoja = "HOSPITALES"
     
-           elif clave == "FEDERACION":
-               nombre_hoja = "FEDERACION"
+            elif clave == "FEDERACION":
+                nombre_hoja = "FEDERACION"
     
-           else:
-               # Extraer número antes del punto
-               if "." in clave:
-                   numero = clave.split(".")[0].strip()
-                   if numero.isdigit():
-                       nombre_hoja = f"ZREP_{numero}"
+            else:
+                # Extraer número antes del punto
+                if "." in clave:
+                    numero = clave.split(".")[0].strip()
+                    if numero.isdigit():
+                        nombre_hoja = f"ZREP_{numero}"
     
-           if nombre_hoja and nombre_hoja in wb_out.sheetnames:
-               ws_res[f"G{fila}"] = f"=SUM('{nombre_hoja}'!G:G)"
+            if nombre_hoja and nombre_hoja in wb_out.sheetnames:
+                ws_res[f"G{fila}"] = f"=SUM('{nombre_hoja}'!G:G)"
     
-           fila += 1
+            fila += 1
             
     # ---- NORMALIZAR HOSPITALES Y FEDERACION ----
     for col in COLUMNAS_BASE:
