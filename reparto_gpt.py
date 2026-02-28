@@ -453,8 +453,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
         "Z.Rep",
         "N_servicio",
     ]
-    meta =
-    pd.DataFrame(
+    meta = pd.DataFrame(
         {
             "Clave": ["Origen de datos", "CSV", "Reglas", "Generado"],
             "Valor": [
