@@ -441,8 +441,20 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
 
     wb_out = Workbook()
     wb_out.remove(wb_out.active)
-
-    meta = pd.DataFrame(
+    COLUMNAS_BASE = [
+        "Exp",
+        "Hospital",
+        "Población",
+        "Dirección",
+        "Consignatario",
+        "Cliente",
+        "Kgs",
+        "Bultos",
+        "Z.Rep",
+        "N_servicio",
+    ]
+    meta =
+    pd.DataFrame(
         {
             "Clave": ["Origen de datos", "CSV", "Reglas", "Generado"],
             "Valor": [
@@ -459,13 +471,13 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     add_df_sheet(
         wb_out,
         "HOSPITALES",
-        hosp[["Exp", "Hospital", "Población", "Dirección", "Consignatario", "Kgs", "Bultos", "Z.Rep"]],
+        hosp[[COLUMNAS_BASE]],
         widths=[10, 20, 18, 55, 25, 12, 10, 10],
     )
     add_df_sheet(
         wb_out,
         "FEDERACION",
-        fed[["Exp", "Población", "Dirección", "Consignatario", "Kgs", "Bultos", "Z.Rep"]],
+        fed[[COLUMNAS_BASE]],
         widths=[6, 18, 55, 70, 16, 12],
     )
     add_df_sheet(wb_out, "RESUMEN_RUTAS_RESTO", resto_summary, widths=[6, 18, 10, 14, 12, 12])
