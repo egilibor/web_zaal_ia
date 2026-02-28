@@ -204,10 +204,36 @@ with tab_fase2:
         key="fase2_uploader"
     )
 
-    if not archivo_modificado:
+    if archivo_modificado:
+    
+        input_path = save_upload(archivo_modificado, workdir / "entrada_fase2.xlsx")
+        output_path = workdir / "salida_reordenada.xlsx"
+    
+        if st.button("Reordenar rutas", type="primary", key="fase2_btn"):
+    
+            try:
+                reordenar_excel(
+                    input_path=input_path,
+                    output_path=output_path,
+                    ruta_coordenadas=COORDENADAS_REPO,
+                )
+            except Exception as e:
+                st.error(f"Error en reordenación: {e}")
+            else:
+                if output_path.exists():
+                    st.success("✅ Rutas reordenadas correctamente")
+    
+                    st.download_button(
+                        "Descargar salida_reordenada.xlsx",
+                        data=output_path.read_bytes(),
+                        file_name="salida_reordenada.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+                else:
+                    st.error("No se generó el archivo reordenado.")
+    else:
         st.info("Sube el archivo para habilitar la reordenación.")
-        st.stop()
-
+    
     input_path = save_upload(archivo_modificado, workdir / "entrada_fase2.xlsx")
     output_path = workdir / "salida_reordenada.xlsx"
 
@@ -235,3 +261,4 @@ with tab_fase2:
             file_name="salida_reordenada.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+
