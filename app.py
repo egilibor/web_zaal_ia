@@ -102,16 +102,23 @@ if missing:
 st.divider()
 
 # -------------------------
-# MENÚ
+# MENÚ PRINCIPAL
 # -------------------------
-opcion = st.selectbox("Menú", ["Asignación reparto"])
+opcion = st.selectbox(
+    "Menú",
+    [
+        "FASE 1 · Asignación reparto",
+        "FASE 2 · Reordenación topográfica"
+    ]
+)
 
 st.divider()
 
-# -------------------------
-# OPCIÓN: Asignación reparto
-# -------------------------
-if opcion == "Asignación reparto":
+# ==========================================================
+# FASE 1 · ASIGNACIÓN REPARTO
+# ==========================================================
+if opcion == "FASE 1 · Asignación reparto":
+
     st.subheader("1) Subir CSV de llegadas")
     csv_file = st.file_uploader("CSV de llegadas", type=["csv"])
 
@@ -158,3 +165,30 @@ if opcion == "Asignación reparto":
             file_name="salida.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+
+# ==========================================================
+# FASE 2 · REORDENACIÓN TOPOGRÁFICA
+# ==========================================================
+elif opcion == "FASE 2 · Reordenación topográfica":
+
+    st.subheader("Reordenar rutas existentes")
+
+    st.info(
+        "Sube un archivo salida.xlsx previamente modificado. "
+        "Solo se reordenarán las hojas ZREP_ por criterio topográfico. "
+        "No se recalcularán zonas ni se tocarán otras hojas."
+    )
+
+    archivo_modificado = st.file_uploader(
+        "Excel modificado (salida.xlsx)",
+        type=["xlsx"],
+        key="fase2_uploader"
+    )
+
+    if not archivo_modificado:
+        st.stop()
+
+    st.warning(
+        "Motor de reordenación aún no implementado. "
+        "FASE 2 preparada estructuralmente."
+    )
