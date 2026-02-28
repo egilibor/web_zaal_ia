@@ -64,7 +64,7 @@ def show_logs(stdout: str, stderr: str):
 
 
 # -------------------------
-# Estado
+# Estado (sidebar solo informativo)
 # -------------------------
 workdir = ensure_workdir()
 
@@ -94,33 +94,28 @@ if not REGLAS_REPO.exists():
     missing.append("Reglas_hospitales.xlsx")
 
 if missing:
-    st.error(
-        "Faltan archivos en el repo desplegado: " + ", ".join(missing)
-    )
+    st.error("Faltan archivos en el repo desplegado: " + ", ".join(missing))
     st.stop()
 
 st.divider()
 
-# -------------------------
-# MENÚ PRINCIPAL
-# -------------------------
-opcion = st.selectbox(
-    "Menú",
+# ==========================================================
+# MENÚ SUPERIOR HORIZONTAL
+# ==========================================================
+tab_fase1, tab_fase2 = st.tabs(
     [
         "FASE 1 · Asignación reparto",
         "FASE 2 · Reordenación topográfica"
     ]
 )
 
-st.divider()
-
 # ==========================================================
-# FASE 1 · ASIGNACIÓN REPARTO
+# FASE 1
 # ==========================================================
-if opcion == "FASE 1 · Asignación reparto":
+with tab_fase1:
 
     st.subheader("1) Subir CSV de llegadas")
-    csv_file = st.file_uploader("CSV de llegadas", type=["csv"])
+    csv_file = st.file_uploader("CSV de llegadas", type=["csv"], key="fase1_csv")
 
     st.divider()
 
@@ -133,7 +128,7 @@ if opcion == "FASE 1 · Asignación reparto":
 
     st.subheader("2) Ejecutar (genera salida.xlsx)")
 
-    if st.button("Ejecutar", type="primary"):
+    if st.button("Ejecutar", type="primary", key="fase1_btn"):
 
         cmd_gpt = [
             sys.executable,
@@ -167,9 +162,9 @@ if opcion == "FASE 1 · Asignación reparto":
         )
 
 # ==========================================================
-# FASE 2 · REORDENACIÓN TOPOGRÁFICA
+# FASE 2
 # ==========================================================
-elif opcion == "FASE 2 · Reordenación topográfica":
+with tab_fase2:
 
     st.subheader("Reordenar rutas existentes")
 
