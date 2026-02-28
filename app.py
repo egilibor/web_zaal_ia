@@ -7,17 +7,26 @@ from pathlib import Path
 
 import streamlit as st
 
+from reordenar_rutas import reordenar_excel
+
+
+# ==========================================================
+# CONFIGURACIÓN GENERAL
+# ==========================================================
+
 st.set_page_config(page_title="Reparto determinista", layout="wide")
 st.title("Reparto determinista (Streamlit)")
 
-# --- Paths en repo ---
 REPO_DIR = Path(__file__).resolve().parent
 SCRIPT_REPARTO = REPO_DIR / "reparto_gpt.py"
 REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
+COORDENADAS_REPO = REPO_DIR / "Libro_de_Servicio_Castellon_con_coordenadas.xlsx"
 
-# -------------------------
-# Utilidades
-# -------------------------
+
+# ==========================================================
+# UTILIDADES
+# ==========================================================
+
 def ensure_workdir() -> Path:
     if "workdir" not in st.session_state:
         st.session_state.workdir = Path(tempfile.mkdtemp(prefix="reparto_"))
@@ -63,9 +72,10 @@ def show_logs(stdout: str, stderr: str):
         st.code(stderr)
 
 
-# -------------------------
-# Estado (sidebar solo informativo)
-# -------------------------
+# ==========================================================
+# ESTADO (SIDEBAR)
+# ==========================================================
+
 workdir = ensure_workdir()
 
 with st.sidebar:
@@ -76,22 +86,30 @@ with st.sidebar:
     st.write(f"Python: `{sys.executable}`")
 
     st.divider()
-    st.write(f"GPT: `{SCRIPT_REPARTO.name}` exists = `{SCRIPT_REPARTO.exists()}`")
-    st.write(f"Reglas: `{REGLAS_REPO.name}` exists = `{REGLAS_REPO.exists()}`")
+    st.write(f"reparto_gpt.py = `{SCRIPT_REPARTO.exists()}`")
+    st.write(f"Reglas_hospitales.xlsx = `{REGLAS_REPO.exists()}`")
+    st.write(f"Libro coordenadas = `{COORDENADAS_REPO.exists()}`")
 
     st.divider()
     if st.button("Reset sesión"):
         reset_session_dir()
         st.rerun()
 
-# -------------------------
-# Verificaciones duras
-# -------------------------
+
+# ==========================================================
+# VERIFICACIONES DURAS
+# ==========================================================
+
 missing = []
+
 if not SCRIPT_REPARTO.exists():
     missing.append("reparto_gpt.py")
+
 if not REGLAS_REPO.exists():
     missing.append("Reglas_hospitales.xlsx")
+
+if not COORDENADAS_REPO.exists():
+    missing.append("Libro_de_Servicio_Castellon_con_coordenadas.xlsx")
 
 if missing:
     st.error("Faltan archivos en el repo desplegado: " + ", ".join(missing))
@@ -99,23 +117,32 @@ if missing:
 
 st.divider()
 
+
 # ==========================================================
 # MENÚ SUPERIOR HORIZONTAL
 # ==========================================================
+
 tab_fase1, tab_fase2 = st.tabs(
     [
         "FASE 1 · Asignación reparto",
-        "FASE 2 · Reordenación topográfica"
+        "FASE 2 · Reordenación topográfica",
     ]
 )
 
+
 # ==========================================================
-# FASE 1
+# FASE 1 · ASIGNACIÓN REPARTO
 # ==========================================================
+
 with tab_fase1:
 
     st.subheader("1) Subir CSV de llegadas")
-    csv_file = st.file_uploader("CSV de llegadas", type=["csv"], key="fase1_csv")
+
+    csv_file = st.file_uploader(
+        "CSV de llegadas",
+        type=["csv"],
+        key="fase1_csv"
+    )
 
     st.divider()
 
@@ -147,6 +174,7 @@ with tab_fase1:
             st.stop()
 
         salida_path = workdir / "salida.xlsx"
+
         if not salida_path.exists():
             st.error("Terminó sin error, pero no encuentro `salida.xlsx`.")
             show_logs(out, err)
@@ -161,29 +189,49 @@ with tab_fase1:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
+
 # ==========================================================
-# FASE 2
+# FASE 2 · REORDENACIÓN TOPOGRÁFICA
 # ==========================================================
+
 with tab_fase2:
 
     st.subheader("Reordenar rutas existentes")
 
-    st.info(
-        "Sube un archivo salida.xlsx previamente modificado. "
-        "Solo se reordenarán las hojas ZREP_ por criterio topográfico. "
-        "No se recalcularán zonas ni se tocarán otras hojas."
-    )
-
     archivo_modificado = st.file_uploader(
-        "Excel modificado (salida.xlsx)",
+        "Subir salida.xlsx modificado",
         type=["xlsx"],
         key="fase2_uploader"
     )
 
     if not archivo_modificado:
+        st.info("Sube el archivo para habilitar la reordenación.")
         st.stop()
 
-    st.warning(
-        "Motor de reordenación aún no implementado. "
-        "FASE 2 preparada estructuralmente."
-    )
+    input_path = save_upload(archivo_modificado, workdir / "entrada_fase2.xlsx")
+    output_path = workdir / "salida_reordenada.xlsx"
+
+    if st.button("Reordenar rutas", type="primary", key="fase2_btn"):
+
+        try:
+            reordenar_excel(
+                input_path=input_path,
+                output_path=output_path,
+                ruta_coordenadas=COORDENADAS_REPO,
+            )
+        except Exception as e:
+            st.error(f"Error en reordenación: {e}")
+            st.stop()
+
+        if not output_path.exists():
+            st.error("No se generó el archivo reordenado.")
+            st.stop()
+
+        st.success("✅ Rutas reordenadas correctamente")
+
+        st.download_button(
+            "Descargar salida_reordenada.xlsx",
+            data=output_path.read_bytes(),
+            file_name="salida_reordenada.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
