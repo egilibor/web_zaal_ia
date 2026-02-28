@@ -420,7 +420,19 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
 
     wb_out = Workbook()
     wb_out.remove(wb_out.active)
-
+    COLUMNAS_BASE = [
+        "Exp",
+        "Hospital",
+        "Población",
+        "Dirección",
+        "Consignatario",
+        "Cliente",
+        "Kgs",
+        "Bultos",
+        "Z.Rep",
+        "N_servicio",
+    ]
+    
     meta = pd.DataFrame(
         {
             "Clave": ["Origen de datos", "CSV", "Reglas", "Generado"],
