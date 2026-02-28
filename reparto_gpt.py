@@ -183,7 +183,7 @@ def style_sheet(ws):
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
     header_font = Font(bold=True)
     header_fill = PatternFill("solid", fgColor="F2F2F2")
-    wrap = Alignment(wrap_text=True, vertical="top")
+    wrap = Alignment(wrap_text=False, vertical="center")
     top = Alignment(vertical="top")
 
     if ws.max_row >= 1:
