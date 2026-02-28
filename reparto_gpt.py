@@ -456,7 +456,8 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     existing = set(wb_out.sheetnames)
 
     for z, sub in resto.groupby("Z.Rep"):
-        sheet_name = safe_sheet_name(f"ZREP_{z}", existing)
+        numero = str(z).split(".")[0].strip()
+        sheet_name = f"ZREP_{numero}"        
         add_df_sheet(wb_out, sheet_name, sub, widths=[10]*10)
 
     # --------------------------------------------------
