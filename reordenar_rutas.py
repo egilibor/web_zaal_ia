@@ -81,6 +81,16 @@ def cargar_coordenadas(ruta: Path) -> dict:
 
     return coords
 
+    for _, row in df.iterrows():
+        pueblo = normalizar_texto(row["PUEBLO"])
+        lat = row["LATITUD"]
+        lon = row["LONGITUD"]
+
+        if pd.notna(pueblo) and pd.notna(lat) and pd.notna(lon):
+            coords[pueblo] = (float(lat), float(lon))
+
+    return coords
+
 
 def calcular_angulo_distancia(lat: float, lon: float):
     dy = lat - LAT0
@@ -165,6 +175,7 @@ def reordenar_excel(input_path: Path, output_path: Path, ruta_coordenadas: Path)
         for nombre, df in hojas_resultado.items():
 
             df.to_excel(writer, sheet_name=nombre, index=False)
+
 
 
 
