@@ -48,7 +48,7 @@ def normalizar_texto(txt: str) -> str:
 def cargar_coordenadas(ruta: Path) -> dict:
     df = pd.read_excel(ruta)
 
-    columnas_necesarias = {"Pueblo", "Latitud", "Longitud"}
+    columnas_necesarias = {"PUEBLO", "Latitud", "Longitud"}
     if not columnas_necesarias.issubset(df.columns):
         raise ValueError("El archivo de coordenadas no tiene las columnas requeridas.")
 
@@ -148,3 +148,4 @@ def reordenar_excel(input_path: Path, output_path: Path, ruta_coordenadas: Path)
         for nombre, df in hojas_resultado.items():
 
             df.to_excel(writer, sheet_name=nombre, index=False)
+
