@@ -448,7 +448,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     resumen_unico_general = overview[overview["Bloque"].ne("RESTO (todas rutas)")].copy()
     resumen_unico_general.insert(0, "Tipo", "GENERAL")
     resumen_unico_general = resumen_unico_general.rename(columns={"Bloque": "Clave"})
-    resumen_unico_general["Bultos"] = pd.NA
+    resumen_unico_general["Bultos"] = None
     resumen_unico_general = resumen_unico_general[
         ["Tipo", "Clave", "Paradas", "Expediciones", "Bultos", "Kilos"]
     ]
