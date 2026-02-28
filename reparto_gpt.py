@@ -459,13 +459,13 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     add_df_sheet(
         wb_out,
         "HOSPITALES",
-        hosp[["Hospital", "Población", "Dirección", "Consignatarios", "Expediciones", "Kilos"]],
-        widths=[6, 18, 18, 55, 70, 16, 12],
+        hosp[["Exp", "Hospital", "Población", "Dirección", "Consignatario", "Kgs", "Bultos", "Z.Rep"]],
+        widths=[10, 20, 18, 55, 25, 12, 10, 10],
     )
     add_df_sheet(
         wb_out,
         "FEDERACION",
-        fed[["Población", "Dirección", "Variantes", "Expediciones", "Kilos"]],
+        fed[["Exp", "Población", "Dirección", "Consignatario", "Kgs", "Bultos", "Z.Rep"]],
         widths=[6, 18, 55, 70, 16, 12],
     )
     add_df_sheet(wb_out, "RESUMEN_RUTAS_RESTO", resto_summary, widths=[6, 18, 10, 14, 12, 12])
