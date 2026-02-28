@@ -312,140 +312,140 @@ def load_csv(csv_path: Path) -> pd.DataFrame:
     if missing:
         raise ValueError(f"Faltan columnas mínimas en CSV: {missing}.")
 
-    df = pd.DataFrame({
-        "Exp": df_raw[col_exp].apply(clean_text),
-        "Kgs": df_raw[col_kg].apply(parse_kg),
-        "Bultos": df_raw[col_btos].apply(parse_int) if col_btos else 0,
-        "Consignatario": df_raw[col_cons].apply(clean_text),
-        "Cliente": df_raw[col_cli].apply(clean_text) if col_cli else "",
-        "Población": df_raw[col_pop].apply(clean_text),
-        "Dirección": (df_raw[col_dir_ok].apply(clean_text) if col_dir_ok else ""),
-        "Z.Rep": df_raw[col_zrep].apply(clean_text) if col_zrep else "SIN_ZONA",
-        "N_servicio": df_raw[col_serv].apply(clean_text) if col_serv else "",
-    })
-    if col_dir_ent:
-        fb = df_raw[col_dir_ent].apply(clean_text)
-        df.loc[df["Dirección"].eq(""), "Dirección"] = fb[df["Dirección"].eq("")]
+df = pd.DataFrame({
+    "Exp": df_raw[col_exp].apply(clean_text),
+    "Kgs": df_raw[col_kg].apply(parse_kg),
+    "Bultos": df_raw[col_btos].apply(parse_int) if col_btos else 0,
+    "Consignatario": df_raw[col_cons].apply(clean_text),
+    "Cliente": df_raw[col_cli].apply(clean_text) if col_cli else "",
+    "Población": df_raw[col_pop].apply(clean_text),
+    "Dirección": (df_raw[col_dir_ok].apply(clean_text) if col_dir_ok else ""),
+    "Z.Rep": df_raw[col_zrep].apply(clean_text) if col_zrep else "SIN_ZONA",
+    "N_servicio": df_raw[col_serv].apply(clean_text) if col_serv else "",
+})
+if col_dir_ent:
+    fb = df_raw[col_dir_ent].apply(clean_text)
+    df.loc[df["Dirección"].eq(""), "Dirección"] = fb[df["Dirección"].eq("")]
 
-    for c in ["Consignatario", "Población", "Dirección", "Z.Rep"]:
-        df.loc[df[c].eq(""), c] = f"SIN_{c.upper().replace('.', '')}"
+for c in ["Consignatario", "Población", "Dirección", "Z.Rep"]:
+    df.loc[df[c].eq(""), c] = f"SIN_{c.upper().replace('.', '')}"
 
-    df["Parada_key"] = (df["Población"] + "||" + df["Dirección"]).str.strip("|")
-    df["Pob_norm"] = df["Población"].apply(norm)
-    df["Dir_norm"] = df["Dirección"].apply(norm)
-    return df
+df["Parada_key"] = (df["Población"] + "||" + df["Dirección"]).str.strip("|")
+df["Pob_norm"] = df["Población"].apply(norm)
+df["Dir_norm"] = df["Dirección"].apply(norm)
+return df
 
-    def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
+def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
 
-        df = load_csv(csv_path)
-    
-        wb_rules = load_workbook(reglas_path, data_only=True)
-        rules_h = sheet_to_df(wb_rules, "REGLAS_HOSPITALES")
-        rules_f = sheet_to_df(wb_rules, "REGLAS_FEDERACION")
-    
-        rules_h_prep = prepare_rules(rules_h, pob_col="Población", pat_col="Patrón_dirección")
-        rules_f_prep = prepare_rules(rules_f, pob_col="Población", pat_col="Patrón_dirección")
-    
-        df["is_hospital"] = False
-        df["is_fed"] = False
-    
-        for i, r in df.iterrows():
-            ok_h, tag = match_rules(r["Pob_norm"], r["Dir_norm"], rules_h_prep, tag_field="Hospital_final")
-            ok_f, _ = match_rules(r["Pob_norm"], r["Dir_norm"], rules_f_prep)
-    
-            if ok_h:
-                df.at[i, "is_hospital"] = True
-                df.at[i, "Hospital"] = tag
-    
-            if ok_f:
-                df.at[i, "is_fed"] = True
-    
-        df["is_any_special"] = df["is_hospital"] | df["is_fed"]
-    
-        hosp = df[df["is_hospital"]].copy()
-        fed = df[df["is_fed"]].copy()
-        resto = df[~df["is_any_special"]].copy()
-    
-        resto_summary = (
-            resto.groupby("Z.Rep")
-            .agg(
-                Paradas=("Parada_key", "nunique"),
-                Expediciones=("Exp", "nunique"),
-                Bultos=("Bultos", "sum"),
-                Kilos=("Kgs", "sum"),
-            )
-            .reset_index()
+    df = load_csv(csv_path)
+
+    wb_rules = load_workbook(reglas_path, data_only=True)
+    rules_h = sheet_to_df(wb_rules, "REGLAS_HOSPITALES")
+    rules_f = sheet_to_df(wb_rules, "REGLAS_FEDERACION")
+
+    rules_h_prep = prepare_rules(rules_h, pob_col="Población", pat_col="Patrón_dirección")
+    rules_f_prep = prepare_rules(rules_f, pob_col="Población", pat_col="Patrón_dirección")
+
+    df["is_hospital"] = False
+    df["is_fed"] = False
+
+    for i, r in df.iterrows():
+        ok_h, tag = match_rules(r["Pob_norm"], r["Dir_norm"], rules_h_prep, tag_field="Hospital_final")
+        ok_f, _ = match_rules(r["Pob_norm"], r["Dir_norm"], rules_f_prep)
+
+        if ok_h:
+            df.at[i, "is_hospital"] = True
+            df.at[i, "Hospital"] = tag
+
+        if ok_f:
+            df.at[i, "is_fed"] = True
+
+    df["is_any_special"] = df["is_hospital"] | df["is_fed"]
+
+    hosp = df[df["is_hospital"]].copy()
+    fed = df[df["is_fed"]].copy()
+    resto = df[~df["is_any_special"]].copy()
+
+    resto_summary = (
+        resto.groupby("Z.Rep")
+        .agg(
+            Paradas=("Parada_key", "nunique"),
+            Expediciones=("Exp", "nunique"),
+            Bultos=("Bultos", "sum"),
+            Kilos=("Kgs", "sum"),
         )
-    
-        overview = pd.DataFrame(
-            {
-                "Bloque": ["HOSPITALES", "FEDERACION", "RESTO (todas rutas)"],
-                "Paradas": [len(hosp), len(fed), resto["Parada_key"].nunique()],
-                "Expediciones": [
-                    hosp["Exp"].nunique(),
-                    fed["Exp"].nunique(),
-                    resto["Exp"].nunique(),
-                ],
-                "Kilos": [
-                    round(hosp["Kgs"].sum(), 1),
-                    round(fed["Kgs"].sum(), 1),
-                    round(resto["Kgs"].sum(), 1),
-                ],
-            }
-        )
-    
-        resumen_unico_general = overview[overview["Bloque"].ne("RESTO (todas rutas)")].copy()
-        resumen_unico_general.insert(0, "Tipo", "GENERAL")
-        resumen_unico_general = resumen_unico_general.rename(columns={"Bloque": "Clave"})
-        resumen_unico_general["Bultos"] = None
-        resumen_unico_general = resumen_unico_general[
-            ["Tipo", "Clave", "Paradas", "Expediciones", "Bultos", "Kilos"]
-        ]
-    
-        resumen_unico_resto = resto_summary.copy()
-        resumen_unico_resto.insert(0, "Tipo", "RESTO")
-        resumen_unico_resto = resumen_unico_resto.rename(columns={"Z.Rep": "Clave"})
-        resumen_unico_resto = resumen_unico_resto[
-            ["Tipo", "Clave", "Paradas", "Expediciones", "Bultos", "Kilos"]
-        ]
-    
-        resumen_unico = pd.concat(
-            [resumen_unico_general, resumen_unico_resto],
-            ignore_index=True
-        )
-    
-        # --------------------------------------------------
-        # CREAR WORKBOOK
-        # --------------------------------------------------
-    
-        wb_out = Workbook()
-        wb_out.remove(wb_out.active)
-    
-        meta = pd.DataFrame(
-            {
-                "Clave": ["Origen de datos", "CSV", "Reglas", "Generado"],
-                "Valor": [
-                    origen,
-                    str(csv_path),
-                    str(reglas_path),
-                    _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                ],
-            }
-        )
-    
-        add_df_sheet(wb_out, "METADATOS", meta, widths=[6, 22, 90])
-        add_df_sheet(wb_out, "RESUMEN_GENERAL", overview, widths=[6, 22, 12, 14, 12])
-        add_df_sheet(wb_out, "RESUMEN_UNICO", resumen_unico, widths=[6, 12, 28, 12, 14, 12, 12])
-    
-        add_df_sheet(wb_out, "HOSPITALES", hosp, widths=[10]*10)
-        add_df_sheet(wb_out, "FEDERACION", fed, widths=[10]*10)
-        add_df_sheet(wb_out, "RESUMEN_RUTAS_RESTO", resto_summary, widths=[6, 18, 10, 14, 12, 12])
-    
-        existing = set(wb_out.sheetnames)
-    
-        for z, sub in resto.groupby("Z.Rep"):
-            sheet_name = safe_sheet_name(f"ZREP_{z}", existing)
-            add_df_sheet(wb_out, sheet_name, sub, widths=[10]*10)
+        .reset_index()
+    )
+
+    overview = pd.DataFrame(
+        {
+            "Bloque": ["HOSPITALES", "FEDERACION", "RESTO (todas rutas)"],
+            "Paradas": [len(hosp), len(fed), resto["Parada_key"].nunique()],
+            "Expediciones": [
+                hosp["Exp"].nunique(),
+                fed["Exp"].nunique(),
+                resto["Exp"].nunique(),
+            ],
+            "Kilos": [
+                round(hosp["Kgs"].sum(), 1),
+                round(fed["Kgs"].sum(), 1),
+                round(resto["Kgs"].sum(), 1),
+            ],
+        }
+    )
+
+    resumen_unico_general = overview[overview["Bloque"].ne("RESTO (todas rutas)")].copy()
+    resumen_unico_general.insert(0, "Tipo", "GENERAL")
+    resumen_unico_general = resumen_unico_general.rename(columns={"Bloque": "Clave"})
+    resumen_unico_general["Bultos"] = None
+    resumen_unico_general = resumen_unico_general[
+        ["Tipo", "Clave", "Paradas", "Expediciones", "Bultos", "Kilos"]
+    ]
+
+    resumen_unico_resto = resto_summary.copy()
+    resumen_unico_resto.insert(0, "Tipo", "RESTO")
+    resumen_unico_resto = resumen_unico_resto.rename(columns={"Z.Rep": "Clave"})
+    resumen_unico_resto = resumen_unico_resto[
+        ["Tipo", "Clave", "Paradas", "Expediciones", "Bultos", "Kilos"]
+    ]
+
+    resumen_unico = pd.concat(
+        [resumen_unico_general, resumen_unico_resto],
+        ignore_index=True
+    )
+
+    # --------------------------------------------------
+    # CREAR WORKBOOK
+    # --------------------------------------------------
+
+    wb_out = Workbook()
+    wb_out.remove(wb_out.active)
+
+    meta = pd.DataFrame(
+        {
+            "Clave": ["Origen de datos", "CSV", "Reglas", "Generado"],
+            "Valor": [
+                origen,
+                str(csv_path),
+                str(reglas_path),
+                _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            ],
+        }
+    )
+
+    add_df_sheet(wb_out, "METADATOS", meta, widths=[6, 22, 90])
+    add_df_sheet(wb_out, "RESUMEN_GENERAL", overview, widths=[6, 22, 12, 14, 12])
+    add_df_sheet(wb_out, "RESUMEN_UNICO", resumen_unico, widths=[6, 12, 28, 12, 14, 12, 12])
+
+    add_df_sheet(wb_out, "HOSPITALES", hosp, widths=[10]*10)
+    add_df_sheet(wb_out, "FEDERACION", fed, widths=[10]*10)
+    add_df_sheet(wb_out, "RESUMEN_RUTAS_RESTO", resto_summary, widths=[6, 18, 10, 14, 12, 12])
+
+    existing = set(wb_out.sheetnames)
+
+    for z, sub in resto.groupby("Z.Rep"):
+        sheet_name = safe_sheet_name(f"ZREP_{z}", existing)
+        add_df_sheet(wb_out, sheet_name, sub, widths=[10]*10)
 
     # --------------------------------------------------
     # ESCRIBIR FÓRMULAS EN RESUMEN_UNICO (AL FINAL)
