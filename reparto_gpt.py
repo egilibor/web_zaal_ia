@@ -312,27 +312,27 @@ def load_csv(csv_path: Path) -> pd.DataFrame:
     if missing:
         raise ValueError(f"Faltan columnas mínimas en CSV: {missing}.")
 
-df = pd.DataFrame({
-    "Exp": df_raw[col_exp].apply(clean_text),
-    "Kgs": df_raw[col_kg].apply(parse_kg),
-    "Bultos": df_raw[col_btos].apply(parse_int) if col_btos else 0,
-    "Consignatario": df_raw[col_cons].apply(clean_text),
-    "Cliente": df_raw[col_cli].apply(clean_text) if col_cli else "",
-    "Población": df_raw[col_pop].apply(clean_text),
-    "Dirección": (df_raw[col_dir_ok].apply(clean_text) if col_dir_ok else ""),
-    "Z.Rep": df_raw[col_zrep].apply(clean_text) if col_zrep else "SIN_ZONA",
-    "N_servicio": df_raw[col_serv].apply(clean_text) if col_serv else "",
-})
-if col_dir_ent:
-    fb = df_raw[col_dir_ent].apply(clean_text)
-    df.loc[df["Dirección"].eq(""), "Dirección"] = fb[df["Dirección"].eq("")]
-
-for c in ["Consignatario", "Población", "Dirección", "Z.Rep"]:
-    df.loc[df[c].eq(""), c] = f"SIN_{c.upper().replace('.', '')}"
-
-df["Parada_key"] = (df["Población"] + "||" + df["Dirección"]).str.strip("|")
-df["Pob_norm"] = df["Población"].apply(norm)
-df["Dir_norm"] = df["Dirección"].apply(norm)
+    df = pd.DataFrame({
+        "Exp": df_raw[col_exp].apply(clean_text),
+        "Kgs": df_raw[col_kg].apply(parse_kg),
+        "Bultos": df_raw[col_btos].apply(parse_int) if col_btos else 0,
+        "Consignatario": df_raw[col_cons].apply(clean_text),
+        "Cliente": df_raw[col_cli].apply(clean_text) if col_cli else "",
+        "Población": df_raw[col_pop].apply(clean_text),
+        "Dirección": (df_raw[col_dir_ok].apply(clean_text) if col_dir_ok else ""),
+        "Z.Rep": df_raw[col_zrep].apply(clean_text) if col_zrep else "SIN_ZONA",
+        "N_servicio": df_raw[col_serv].apply(clean_text) if col_serv else "",
+    })
+    if col_dir_ent:
+        fb = df_raw[col_dir_ent].apply(clean_text)
+        df.loc[df["Dirección"].eq(""), "Dirección"] = fb[df["Dirección"].eq("")]
+    
+    for c in ["Consignatario", "Población", "Dirección", "Z.Rep"]:
+        df.loc[df[c].eq(""), c] = f"SIN_{c.upper().replace('.', '')}"
+    
+    df["Parada_key"] = (df["Población"] + "||" + df["Dirección"]).str.strip("|")
+    df["Pob_norm"] = df["Población"].apply(norm)
+    df["Dir_norm"] = df["Dirección"].apply(norm)
 return df
 
 def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
