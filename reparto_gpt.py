@@ -321,7 +321,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     resto = df[~df["is_any_special"]].copy()
     
 
-        resto_summary = (
+    resto_summary = (
         resto.groupby("Z.Rep")
         .agg(
             Paradas=("Parada_key", "nunique"),
