@@ -238,7 +238,7 @@ import math
 
 ORIGEN_LAT = 39.804106
 ORIGEN_LON = -0.217351
-COORD_FILE = "Libro_de_Servicio_Castellon_con_coordenadas.xlsx"
+COORD_FILE = Path(__file__).parent / "Libro_de_Servicio_Castellon_con_coordenadas.xlsx"
 
 def build_pueblo_coords():
     df = pd.read_excel(COORD_FILE)
