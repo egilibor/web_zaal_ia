@@ -365,38 +365,11 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
 
     df["is_any_special"] = df["is_hospital"] | df["is_fed"]
 
-    hosp = (
-        df[df["is_hospital"]]
-        .groupby("Parada_key", dropna=False)
-        .agg(
-            Hospital=("Hospital", "first"),
-            Población=("Población", "first"),
-            Dirección=("Dirección", "first"),
-            Consignatarios=("Consignatario", lambda s: unique_join(list(s))),
-            Expediciones=("Exp", lambda s: s.nunique()),
-            Kilos=("Kgs", "sum"),
-        )
-        .reset_index(drop=True)
-        .sort_values(["Hospital", "Población", "Dirección"], kind="stable")
-        .reset_index(drop=True)
-    )
-    hosp["Kilos"] = hosp["Kilos"].round(1)
+    hosp = df[df["is_hospital"]].copy()
+    hosp = hosp.sort_values(["Hospital", "Población", "Dirección"], kind="stable").reset_index(drop=True)
 
-    fed = (
-        df[df["is_fed"]]
-        .groupby("Parada_key", dropna=False)
-        .agg(
-            Población=("Población", "first"),
-            Dirección=("Dirección", "first"),
-            Variantes=("Consignatario", lambda s: unique_join(list(s))),
-            Expediciones=("Exp", lambda s: s.nunique()),
-            Kilos=("Kgs", "sum"),
-        )
-        .reset_index(drop=True)
-        .sort_values(["Población", "Dirección"], kind="stable")
-        .reset_index(drop=True)
-    )
-    fed["Kilos"] = fed["Kilos"].round(1)
+    fed = df[df["is_fed"]].copy()
+    fed = fed.sort_values(["Población", "Dirección"], kind="stable").reset_index(drop=True)  
 
     resto = df[~df["is_any_special"]].copy()
     resto_grp = (
