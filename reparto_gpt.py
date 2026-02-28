@@ -226,67 +226,12 @@ def safe_sheet_name(name: str, existing: set) -> str:
 def add_df_sheet(wb: Workbook, name: str, df_sheet: pd.DataFrame, widths: List[int]) -> None:
     ws = wb.create_sheet(title=name)
     out = df_sheet.copy()
-    out.insert(0, "Nº", range(1, len(out) + 1))
+    # Numeración eliminada FASE 1
     for row in dataframe_to_rows(out, index=False, header=True):
         ws.append(row)
     style_sheet(ws)
     set_widths(ws, widths)
 
-
-
-import math
-
-ORIGEN_LAT = 39.804106
-ORIGEN_LON = -0.217351
-COORD_FILE = Path(__file__).parent / "Libro_de_Servicio_Castellon_con_coordenadas.xlsx"
-
-def build_pueblo_coords():
-    df = pd.read_excel(COORD_FILE)
-    coords = {}
-    for _, r in df.iterrows():
-        pueblo = norm(str(r["PUEBLO"]))
-        lat = float(r["Latitud"])
-        lon = float(r["Longitud"])
-        coords[pueblo] = (lat, lon)
-    return coords
-
-def haversine(lat1, lon1, lat2, lon2):
-    R = 6371
-    phi1 = math.radians(lat1)
-    phi2 = math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lon2 - lon1)
-    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
-    return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1-a))
-
-def nearest_neighbor_route(pueblos, coords):
-    restantes = pueblos.copy()
-    ruta = []
-    actual_lat = ORIGEN_LAT
-    actual_lon = ORIGEN_LON
-
-    while restantes:
-        mejor = None
-        mejor_dist = float("inf")
-
-        for p in restantes:
-            if p not in coords:
-                continue
-            lat, lon = coords[p]
-            dist = haversine(actual_lat, actual_lon, lat, lon)
-            if mejor is None or dist < mejor_dist or (dist == mejor_dist and p < mejor):
-                mejor_dist = dist
-                mejor = p
-
-        if mejor is None:
-            ruta.extend(sorted(restantes))
-            break
-
-        ruta.append(mejor)
-        actual_lat, actual_lon = coords[mejor]
-        restantes.remove(mejor)
-
-    return ruta
 
 # -------------------------
 # Core
@@ -400,7 +345,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
 
     resto = df[~df["is_any_special"]].copy()
     resto_grp = (
-        resto.groupby(["Z.Rep", "Parada_key"], dropna=False)
+        resto# AGRUPACION POR PARADA ELIMINADA FASE 1
         .agg(
             Población=("Población", "first"),
             Dirección=("Dirección", "first"),
@@ -444,28 +389,6 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
         }
     )
 
-    # RESUMEN_UNICO = GENERAL + RESTO desglosado
-    resumen_unico_general = overview[overview["Bloque"].ne("RESTO (todas rutas)")].copy()
-    resumen_unico_general.insert(0, "Tipo", "GENERAL")
-    resumen_unico_general = resumen_unico_general.rename(columns={"Bloque": "Clave"})
-    resumen_unico_general["Bultos"] = None
-    resumen_unico_general = resumen_unico_general[
-        ["Tipo", "Clave", "Paradas", "Expediciones", "Bultos", "Kilos"]
-    ]
-
-    resumen_unico_resto = resto_summary.copy()
-    resumen_unico_resto.insert(0, "Tipo", "RESTO")
-    resumen_unico_resto = resumen_unico_resto.rename(columns={"Z.Rep": "Clave"})
-    resumen_unico_resto = resumen_unico_resto[
-        ["Tipo", "Clave", "Paradas", "Expediciones", "Bultos", "Kilos"]
-    ]
-
-    resumen_unico = pd.concat(
-        [resumen_unico_general, resumen_unico_resto],
-        ignore_index=True
-    )
-
-
     wb_out = Workbook()
     wb_out.remove(wb_out.active)
 
@@ -482,7 +405,6 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     )
     add_df_sheet(wb_out, "METADATOS", meta, widths=[6, 22, 90])
     add_df_sheet(wb_out, "RESUMEN_GENERAL", overview, widths=[6, 22, 12, 14, 12])
-    add_df_sheet(wb_out, "RESUMEN_UNICO", resumen_unico, widths=[6, 12, 28, 12, 14, 12, 12])
     add_df_sheet(
         wb_out,
         "HOSPITALES",
@@ -502,16 +424,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
         sheet_name = safe_sheet_name(f"ZREP_{z}", existing)
         ws = wb_out.create_sheet(sheet_name)
         out = sub.drop(columns=["Z.Rep", "Parada_key"]).copy()
-        
-        coords = build_pueblo_coords()
-        out["PUEBLO_NORM"] = out["Población"].apply(norm)
-        pueblos_unicos = list(dict.fromkeys(out["PUEBLO_NORM"].tolist()))
-        orden_pueblos = nearest_neighbor_route(pueblos_unicos, coords)
-        ranking = {p: i for i, p in enumerate(orden_pueblos)}
-        out["orden_pueblo"] = out["PUEBLO_NORM"].map(ranking).fillna(9999)
-        out = out.sort_values(["orden_pueblo"], kind="stable").reset_index(drop=True)
-        out = out.drop(columns=["PUEBLO_NORM", "orden_pueblo"])
-    
+        out = out.sort_values(["Población", "Dirección"], kind="stable").reset_index(drop=True)
         out.insert(0, "Parada", range(1, len(out) + 1))
         for row in dataframe_to_rows(out, index=False, header=True):
             ws.append(row)
