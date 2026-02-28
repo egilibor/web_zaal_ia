@@ -503,28 +503,28 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
 
     existing = set(wb_out.sheetnames)
 
-     for z, sub in resto.groupby("Z.Rep"):
-        sheet_name = safe_sheet_name(f"ZREP_{z}", existing)
-        ws = wb_out.create_sheet(sheet_name)
-        out = sub.copy()
+   for z, sub in resto.groupby("Z.Rep"):
+       sheet_name = safe_sheet_name(f"ZREP_{z}", existing)
+       ws = wb_out.create_sheet(sheet_name)
+       out = sub.copy()
         
-        coords = build_pueblo_coords()
-        out["PUEBLO_NORM"] = out["Población"].apply(norm)
-        pueblos_unicos = list(dict.fromkeys(out["PUEBLO_NORM"].tolist()))
-        orden_pueblos = nearest_neighbor_route(pueblos_unicos, coords)
-        ranking = {p: i for i, p in enumerate(orden_pueblos)}
-        out["orden_pueblo"] = out["PUEBLO_NORM"].map(ranking).fillna(9999)
-        out = out.sort_values(["orden_pueblo"], kind="stable").reset_index(drop=True)
-        out = out.drop(columns=["PUEBLO_NORM", "orden_pueblo"])
-        out = out[COLUMNAS_BASE]
+       coords = build_pueblo_coords()
+       out["PUEBLO_NORM"] = out["Población"].apply(norm)
+       pueblos_unicos = list(dict.fromkeys(out["PUEBLO_NORM"].tolist()))
+       orden_pueblos = nearest_neighbor_route(pueblos_unicos, coords)
+       ranking = {p: i for i, p in enumerate(orden_pueblos)}
+       out["orden_pueblo"] = out["PUEBLO_NORM"].map(ranking).fillna(9999)
+       out = out.sort_values(["orden_pueblo"], kind="stable").reset_index(drop=True)
+       out = out.drop(columns=["PUEBLO_NORM", "orden_pueblo"])
+       out = out[COLUMNAS_BASE]
     
-        for row in dataframe_to_rows(out, index=False, header=True):
-            ws.append(row)
-        style_sheet(ws)
-        set_widths(ws, [8, 18, 55, 70, 16, 12, 12, 22])
+       for row in dataframe_to_rows(out, index=False, header=True):
+           ws.append(row)
+       style_sheet(ws)
+       set_widths(ws, [8, 18, 55, 70, 16, 12, 12, 22])
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    wb_out.save(out_path)
+   out_path.parent.mkdir(parents=True, exist_ok=True)
+   wb_out.save(out_path)
 
 
 def main():
