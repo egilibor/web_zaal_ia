@@ -113,42 +113,54 @@ def ordenar_dataframe_zrep(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
             raise ValueError(f"Falta columna obligatoria: {col}")
 
     df = df.copy()
-    df["_orden_original"] = range(len(df))
 
-    angulos = []
-    distancias = []
-    sin_coord = []
+    # Separar con y sin coordenadas
+    filas_con_coord = []
+    filas_sin_coord = []
 
-    for _, row in df.iterrows():
-
+    for idx, row in df.iterrows():
         pueblo_norm = normalizar_texto(row["Población"])
 
         if pueblo_norm in coords:
             lat, lon = coords[pueblo_norm]
-            ang, dist = calcular_angulo_distancia(lat, lon)
-            angulos.append(ang)
-            distancias.append(dist)
-            sin_coord.append(False)
+            filas_con_coord.append((idx, lat, lon))
         else:
-            angulos.append(0.0)
-            distancias.append(0.0)
-            sin_coord.append(True)
+            filas_sin_coord.append(idx)
 
-    df["_angulo"] = angulos
-    df["_distancia"] = distancias
-    df["_sin_coord"] = sin_coord
+    visitados = []
+    restantes = filas_con_coord.copy()
 
-    df_sorted = df.sort_values(
-        by=["_sin_coord", "_angulo", "_distancia", "Exp"],
-        ascending=[True, True, True, True],
-        kind="mergesort",
-    )
+    lat_actual = LAT0
+    lon_actual = LON0
 
-    df_sorted = df_sorted.drop(
-        columns=["_orden_original", "_angulo", "_distancia", "_sin_coord"]
-    )
+    while restantes:
 
-    return df_sorted
+        # Calcular distancias desde punto actual
+        distancias = []
+        for item in restantes:
+            idx, lat, lon = item
+            d = (lat - lat_actual) ** 2 + (lon - lon_actual) ** 2
+            distancias.append((d, idx, lat, lon))
+
+        # Elegir el más cercano
+        distancias.sort(key=lambda x: (x[0], x[1]))
+        d_min, idx_sel, lat_sel, lon_sel = distancias[0]
+
+        visitados.append(idx_sel)
+
+        # Actualizar punto actual
+        lat_actual = lat_sel
+        lon_actual = lon_sel
+
+        # Quitar seleccionado
+        restantes = [r for r in restantes if r[0] != idx_sel]
+
+    # Añadir los sin coordenadas al final en orden original
+    orden_final = visitados + filas_sin_coord
+
+    df_ordenado = df.loc[orden_final]
+
+    return df_ordenado
 
 
 # -------------------------------------------------
@@ -175,6 +187,7 @@ def reordenar_excel(input_path: Path, output_path: Path, ruta_coordenadas: Path)
         for nombre, df in hojas_resultado.items():
 
             df.to_excel(writer, sheet_name=nombre, index=False)
+
 
 
 
