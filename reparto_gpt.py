@@ -503,7 +503,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
 
     existing = set(wb_out.sheetnames)
 
-   for z, sub in resto.groupby("Z.Rep"):
+    for z, sub in resto.groupby("Z.Rep"):
        sheet_name = safe_sheet_name(f"ZREP_{z}", existing)
        ws = wb_out.create_sheet(sheet_name)
        out = sub.copy()
@@ -523,8 +523,8 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
        style_sheet(ws)
        set_widths(ws, [8, 18, 55, 70, 16, 12, 12, 22])
 
-   out_path.parent.mkdir(parents=True, exist_ok=True)
-   wb_out.save(out_path)
+       out_path.parent.mkdir(parents=True, exist_ok=True)
+       wb_out.save(out_path)
 
 
 def main():
