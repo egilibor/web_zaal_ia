@@ -34,7 +34,9 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.dataframe import dataframe_to_rows
-
+import os
+print(__file__)
+print("RUTA:", __file__)
 print("ESTE ARCHIVO ES EL CORRECTO")
 # -------------------------
 # Utilidades
