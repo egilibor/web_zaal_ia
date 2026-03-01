@@ -7,7 +7,7 @@ from pathlib import Path
 
 import streamlit as st
 from reordenar_rutas import reordenar_excel
-
+from utils.add_resumen_unico import generar_resumen_unico
 
 # ==========================================================
 # CONFIG
@@ -99,6 +99,7 @@ with tab1:
             else:
                 salida = workdir / "salida.xlsx"
                 if salida.exists():
+                    generar_resumen_unico(str(salida))
                     st.success("Archivo generado correctamente")
 
                     st.download_button(
@@ -160,3 +161,4 @@ with tab2:
 
     else:
         st.info("Sube el archivo para activar la reordenación.")
+
