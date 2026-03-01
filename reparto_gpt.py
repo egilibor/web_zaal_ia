@@ -417,28 +417,6 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
         }
     )
 
-    # RESUMEN_UNICO = GENERAL + RESTO desglosado
-    resumen_unico_general = overview[overview["Bloque"].ne("RESTO (todas rutas)")].copy()
-    resumen_unico_general.insert(0, "Tipo", "GENERAL")
-    resumen_unico_general = resumen_unico_general.rename(columns={"Bloque": "Clave"})
-    resumen_unico_general["Bultos"] = None
-    resumen_unico_general = resumen_unico_general[
-        ["Tipo", "Clave", "Paradas", "Expediciones", "Bultos", "Kilos"]
-    ]
-
-    resumen_unico_resto = resto_summary.copy()
-    resumen_unico_resto.insert(0, "Tipo", "RESTO")
-    resumen_unico_resto = resumen_unico_resto.rename(columns={"Z.Rep": "Clave"})
-    resumen_unico_resto = resumen_unico_resto[
-        ["Tipo", "Clave", "Paradas", "Expediciones", "Bultos", "Kilos"]
-    ]
-
-    resumen_unico = pd.concat(
-        [resumen_unico_general, resumen_unico_resto],
-        ignore_index=True
-    )
-
-
     wb_out = Workbook()
     wb_out.remove(wb_out.active)
     COLUMNAS_BASE = [
@@ -466,8 +444,34 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     )
 
     add_df_sheet(wb_out, "METADATOS", meta, widths=[6, 22, 90])
-    add_df_sheet(wb_out, "RESUMEN_GENERAL", overview, widths=[6, 22, 12, 14, 12])
-    add_df_sheet(wb_out, "RESUMEN_UNICO", resumen_unico, widths=[6, 12, 28, 12, 14, 12, 12])
+        
+    # -----------------------------
+    # NUEVO RESUMEN_UNICO DINÁMICO
+    # -----------------------------
+
+    operativas = []
+
+    if "HOSPITALES" in wb_out.sheetnames:
+        operativas.append("HOSPITALES")
+
+    if "FEDERACION" in wb_out.sheetnames:
+        operativas.append("FEDERACION")
+
+    zrep_sheets = sorted([s for s in wb_out.sheetnames if s.startswith("ZREP_")])
+    operativas.extend(zrep_sheets)
+
+    ws_res = wb_out.create_sheet("RESUMEN_UNICO")
+    ws_res.append(["Clave", "Expediciones", "Bultos", "Kilos"])
+
+    for hoja in operativas:
+        f_exp = f"=COUNTA('{hoja}'!A:A)-1"
+        f_bul = f"=SUM('{hoja}'!H:H)"
+        f_kg = f"=SUM('{hoja}'!G:G)"
+        ws_res.append([hoja, f_exp, f_bul, f_kg])
+
+    style_sheet(ws_res)
+    set_widths(ws_res, [20, 15, 15, 15])
+
 
     # ---- NORMALIZAR HOSPITALES Y FEDERACION ----
     for col in COLUMNAS_BASE:
@@ -494,13 +498,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
         widths=[10, 20, 18, 55, 25, 12, 10, 10],
     )
 
-    add_df_sheet(
-        wb_out,
-        "RESUMEN_RUTAS_RESTO",
-        resto_summary,
-        widths=[6, 18, 10, 14, 12, 12],
-    )
-
+    
     existing = set(wb_out.sheetnames)
 
     for z, sub in resto.groupby("Z.Rep"):
