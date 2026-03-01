@@ -34,10 +34,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.dataframe import dataframe_to_rows
-import os
-print(__file__)
-print("RUTA:", __file__)
-print("ESTE ARCHIVO ES EL CORRECTO")
+
 # -------------------------
 # Utilidades
 # -------------------------
@@ -338,7 +335,7 @@ def load_csv(csv_path: Path) -> pd.DataFrame:
     return df
 
 def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
-    print("RUN SE ESTÁ EJECUTANDO")
+
     df = load_csv(csv_path)
 
     wb_rules = load_workbook(reglas_path, data_only=True)
