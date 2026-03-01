@@ -336,6 +336,7 @@ def load_csv(csv_path: Path) -> pd.DataFrame:
     return df
 
 def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
+    print("RUN SE ESTÁ EJECUTANDO")
     df = load_csv(csv_path)
 
     wb_rules = load_workbook(reglas_path, data_only=True)
@@ -460,8 +461,6 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     zrep_sheets = sorted([s for s in wb_out.sheetnames if s.startswith("ZREP_")])
     operativas.extend(zrep_sheets)
 
-    print("HOJAS EN ESE MOMENTO:", wb_out.sheetnames)
-    
     ws_res = wb_out.create_sheet("RESUMEN_UNICO")
     ws_res.append(["Clave", "Expediciones", "Bultos", "Kilos"])
 
