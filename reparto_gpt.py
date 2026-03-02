@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 AGENTE CASTELLÓN · SALIDA DIARIA (HOSPITALES + FEDERACIÓN + RESTO POR Z.REP)
-Versión para Streamlit
+Versión para Streamlit - CON ORDEN FORZADO
 """
 
 from __future__ import annotations
@@ -197,12 +197,21 @@ def add_df_sheet(wb: Workbook, name: str, df_sheet: pd.DataFrame, widths: List[i
     style_sheet(ws)
     set_widths(ws, widths)
 
-def reorder_sheets(wb, new_order):
-    """Fuerza el reordenamiento de las hojas según la lista new_order"""
-    for idx, sheet_name in enumerate(new_order):
+def force_sheet_order(wb, sheet_names_in_order):
+    """FUERZA BRUTA: reordena las hojas en el orden exacto especificado"""
+    # Crear una lista con las hojas en el orden deseado
+    ordered_sheets = []
+    for sheet_name in sheet_names_in_order:
         if sheet_name in wb.sheetnames:
-            sheet = wb[sheet_name]
-            wb._sheets.insert(idx, wb._sheets.pop(wb._sheets.index(sheet)))
+            ordered_sheets.append(wb[sheet_name])
+    
+    # Añadir cualquier hoja que falte al final
+    for sheet_name in wb.sheetnames:
+        if sheet_name not in sheet_names_in_order:
+            ordered_sheets.append(wb[sheet_name])
+    
+    # Reemplazar la lista de hojas completamente
+    wb._sheets = ordered_sheets
 
 
 # -------------------------
@@ -477,7 +486,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> Bytes
         style_sheet(ws)
         set_widths(ws, [8, 18, 55, 70, 16, 12, 12, 22])
 
-    # FORZAR EL ORDEN DE LAS HOJAS
+    # ===== FUERZA BRUTA: forzar el orden de las hojas =====
     orden_deseado = [
         "RESUMEN_UNICO",
         "METADATOS", 
@@ -485,9 +494,13 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> Bytes
         "HOSPITALES",
         "FEDERACION",
         "RESUMEN_RUTAS_RESTO"
-    ] + [s for s in wb_out.sheetnames if s.startswith("ZREP_")]
+    ]
+    # Añadir las ZREP en orden
+    zrep_sheets = sorted([s for s in wb_out.sheetnames if s.startswith("ZREP_")])
+    orden_deseado.extend(zrep_sheets)
     
-    reorder_sheets(wb_out, orden_deseado)
+    # Aplicar el orden forzado
+    force_sheet_order(wb_out, orden_deseado)
 
     # Guardar en BytesIO para Streamlit
     output = BytesIO()
@@ -503,7 +516,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> Bytes
 
 
 def main():
-    # Versión para línea de comandos (opcional)
+    # Versión para línea de comandos
     try:
         if WORKDIR.exists():
             os.chdir(WORKDIR)
@@ -521,13 +534,13 @@ def main():
     out_p = Path(args.out) if args.out else None
 
     if csv_p is None or not csv_p.exists():
-        csv_p = Path(input(f"Ruta del CSV [ {DEFAULT_CSV} ]: ").strip() or DEFAULT_CSV)
+        csv_p = Path(input(f"Ruta del CSV [{DEFAULT_CSV}]: ").strip() or DEFAULT_CSV)
     if reglas_p is None or not reglas_p.exists():
-        reglas_p = Path(input(f"Ruta del Excel de reglas [ {DEFAULT_REGLAS} ]: ").strip() or DEFAULT_REGLAS)
+        reglas_p = Path(input(f"Ruta del Excel de reglas [{DEFAULT_REGLAS}]: ").strip() or DEFAULT_REGLAS)
     if out_p is None:
-        out_p = Path(input(f"Ruta de salida [ {DEFAULT_OUT} ]: ").strip() or DEFAULT_OUT)
+        out_p = Path(input(f"Ruta de salida [{DEFAULT_OUT}]: ").strip() or DEFAULT_OUT)
 
-    origen = "LLEGADAS"  # O podrías preguntarlo
+    origen = "LLEGADAS"
 
     run(csv_p, reglas_p, out_p, origen)
     print(f"OK: generado {out_p}")
