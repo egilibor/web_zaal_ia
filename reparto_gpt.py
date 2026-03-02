@@ -540,8 +540,8 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
         ws for ws in wb_out.worksheets if ws.title not in orden_deseado
     ]
     
-   out_path.parent.mkdir(parents=True, exist_ok=True)
-   wb_out.save(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    wb_out.save(out_path)
 
 
 def main():
