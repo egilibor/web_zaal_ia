@@ -464,9 +464,9 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
             ],
         }
     )
-
-    add_df_sheet(wb_out, "METADATOS", meta, widths=[6, 22, 90])
+    
     add_df_sheet(wb_out, "RESUMEN_UNICO", resumen_unico, widths=[6, 12, 28, 12, 14, 12, 12])
+    add_df_sheet(wb_out, "METADATOS", meta, widths=[6, 22, 90])
     add_df_sheet(wb_out, "RESUMEN_GENERAL", overview, widths=[6, 22, 12, 14, 12])
     
     # ---- NORMALIZAR HOSPITALES Y FEDERACION ----
