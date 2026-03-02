@@ -10,7 +10,7 @@ def generar_resumen_unico(ruta_excel: str) -> None:
         ws = wb["RESUMEN_UNICO"]
         ws.delete_rows(1, ws.max_row)
     else:
-        ws = wb.create_sheet("RESUMEN_UNICO_PRUEBA")
+        ws = wb.create_sheet("RESUMEN_UNICO")
 
     # Detectar hojas operativas
     operativas = []
@@ -45,4 +45,5 @@ def generar_resumen_unico(ruta_excel: str) -> None:
     ws.column_dimensions["D"].width = 15
 
     wb.save(ruta_excel)
+
 
