@@ -9,6 +9,7 @@ import streamlit as st
 from reordenar_rutas import reordenar_excel
 from add_resumen_unico import generar_resumen_unico
 
+
 # ==========================================================
 # CONFIG
 # ==========================================================
@@ -23,7 +24,7 @@ COORDENADAS_REPO = REPO_DIR / "Libro_de_Servicio_Castellon_con_coordenadas.xlsx"
 
 
 # ==========================================================
-# WORKDIR
+# WORKDIR POR SESIÓN
 # ==========================================================
 
 if "workdir" not in st.session_state:
@@ -35,6 +36,7 @@ workdir = st.session_state.workdir
 with st.sidebar:
     st.write(f"Run ID: {st.session_state.run_id}")
     st.write(f"Workdir: {workdir}")
+
     if st.button("Reset sesión"):
         shutil.rmtree(workdir, ignore_errors=True)
         st.session_state.workdir = Path(tempfile.mkdtemp(prefix="reparto_"))
@@ -43,7 +45,7 @@ with st.sidebar:
 
 
 # ==========================================================
-# MENÚ HORIZONTAL
+# MENÚ
 # ==========================================================
 
 tab1, tab2 = st.tabs([
@@ -71,18 +73,23 @@ with tab1:
         input_csv = workdir / "llegadas.csv"
         input_csv.write_bytes(csv_file.getbuffer())
 
-        (workdir / "Reglas_hospitales.xlsx").write_bytes(
-            REGLAS_REPO.read_bytes()
-        )
+        # Copiamos reglas al workdir
+        reglas_path = workdir / "Reglas_hospitales.xlsx"
+        reglas_path.write_bytes(REGLAS_REPO.read_bytes())
 
-        if st.button("Generar salida.xlsx", key="fase1_btn"):
+        if st.button("Generar reparto", key="fase1_btn"):
+
+            # 🔹 Nombre único por ejecución
+            unique_id = uuid.uuid4().hex[:10]
+            nombre_salida = f"rutas_{unique_id}.xlsx"
+            salida_path = workdir / nombre_salida
 
             cmd = [
                 sys.executable,
                 str(SCRIPT_REPARTO),
                 "--csv", "llegadas.csv",
                 "--reglas", "Reglas_hospitales.xlsx",
-                "--out", "salida.xlsx",
+                "--out", nombre_salida,
             ]
 
             with st.spinner("Ejecutando reparto_gpt.py…"):
@@ -97,20 +104,24 @@ with tab1:
                 st.error("Error en reparto_gpt.py")
                 st.code(p.stderr)
             else:
-                salida = workdir / "salida.xlsx"
-                if salida.exists():
-                    generar_resumen_unico(str(salida))
-                    st.error("ADD_RESUMEN_UNICO ACABA DE EJECUTARSE")
+                if salida_path.exists():
+
+                    st.info(f"Archivo generado: {nombre_salida}")
+
+                    # Ejecutamos módulo de resumen
+                    generar_resumen_unico(str(salida_path))
+                    st.warning("add_resumen_unico ejecutado")
+
                     st.success("Archivo generado correctamente")
 
                     st.download_button(
-                        "Descargar salida.xlsx",
-                        data=salida.read_bytes(),
-                        file_name="salida.xlsx",
+                        "Descargar archivo generado",
+                        data=salida_path.read_bytes(),
+                        file_name=nombre_salida,
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     )
                 else:
-                    st.error("No se generó salida.xlsx")
+                    st.error("No se generó el archivo de salida")
     else:
         st.info("Sube un CSV para habilitar la ejecución.")
 
@@ -124,7 +135,7 @@ with tab2:
     st.subheader("Reordenar rutas existentes")
 
     archivo_excel = st.file_uploader(
-        "Subir salida.xlsx modificado",
+        "Subir archivo Excel",
         type=["xlsx"],
         key="fase2_excel"
     )
@@ -132,7 +143,8 @@ with tab2:
     if archivo_excel:
 
         input_path = workdir / "entrada_fase2.xlsx"
-        output_path = workdir / "salida_reordenada.xlsx"
+        output_unique = f"salida_reordenada_{uuid.uuid4().hex[:8]}.xlsx"
+        output_path = workdir / output_unique
 
         input_path.write_bytes(archivo_excel.getbuffer())
 
@@ -149,9 +161,9 @@ with tab2:
                     st.success("Rutas reordenadas correctamente")
 
                     st.download_button(
-                        "Descargar salida_reordenada.xlsx",
+                        "Descargar archivo reordenado",
                         data=output_path.read_bytes(),
-                        file_name="salida_reordenada.xlsx",
+                        file_name=output_unique,
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     )
                 else:
@@ -162,8 +174,3 @@ with tab2:
 
     else:
         st.info("Sube el archivo para activar la reordenación.")
-
-
-
-
-
