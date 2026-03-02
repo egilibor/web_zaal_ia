@@ -71,13 +71,12 @@ def cargar_coordenadas(ruta: Path) -> dict:
 
 
 # -------------------------------------------------
-# DISTANCIA REAL (HAVERSINE)
+# DISTANCIA
 # -------------------------------------------------
 
-def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+def haversine(lat1, lon1, lat2, lon2):
     R = 6371
     lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
-
     dlat = lat2 - lat1
     dlon = lon2 - lon1
 
@@ -91,7 +90,7 @@ def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 # -------------------------------------------------
-# ORDENACIÓN POR HOJA ZREP
+# ORDENACIÓN ZREP
 # -------------------------------------------------
 
 def ordenar_dataframe_zrep(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
@@ -107,7 +106,6 @@ def ordenar_dataframe_zrep(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
 
     for idx, row in df.iterrows():
         pueblo_norm = normalizar_texto(row["Población"])
-
         if pueblo_norm in coords:
             lat, lon = coords[pueblo_norm]
             filas_con_coord.append((idx, lat, lon))
@@ -121,11 +119,10 @@ def ordenar_dataframe_zrep(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
     lon_actual = LON0
 
     while restantes:
-
-        distancias = []
-        for idx, lat, lon in restantes:
-            d = haversine(lat_actual, lon_actual, lat, lon)
-            distancias.append((d, idx, lat, lon))
+        distancias = [
+            (haversine(lat_actual, lon_actual, lat, lon), idx, lat, lon)
+            for idx, lat, lon in restantes
+        ]
 
         distancias.sort(key=lambda x: (x[0], x[1]))
         _, idx_sel, lat_sel, lon_sel = distancias[0]
@@ -137,126 +134,17 @@ def ordenar_dataframe_zrep(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
         restantes = [r for r in restantes if r[0] != idx_sel]
 
     orden_final = visitados + filas_sin_coord
-
     df_ordenado = df.loc[orden_final].copy()
-
-    # ---- KM ENTRE PARADAS ----
-    kms = []
-    lat_actual = LAT0
-    lon_actual = LON0
-
-    for _, row in df_ordenado.iterrows():
-        pueblo_norm = normalizar_texto(row["Población"])
-
-        if pueblo_norm in coords:
-            lat, lon = coords[pueblo_norm]
-            km = haversine(lat_actual, lon_actual, lat, lon)
-            kms.append(round(km, 1))
-            lat_actual = lat
-            lon_actual = lon
-        else:
-            kms.append(None)
-
-    df_ordenado["Km_desde_anterior"] = kms
 
     return df_ordenado
 
 
 # -------------------------------------------------
-# ORDENAR HOSPITALES
+# ORDENACIÓN HOSPITALES
 # -------------------------------------------------
 
 def ordenar_hospitales(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
-
-    df = df.copy()
-    df["_orden_original"] = range(len(df))
-
-    df["_clave_parada"] = (
-        df["Consignatario"].apply(normalizar_texto)
-        + "|"
-        + df["Dirección"].apply(normalizar_texto)
-    )
-
-    paradas = {}
-
-    for idx, row in df.iterrows():
-        clave = row["_clave_parada"]
-        if clave not in paradas:
-            paradas[clave] = {
-                "indices": [],
-                "poblacion": normalizar_texto(row["Población"]),
-            }
-        paradas[clave]["indices"].append(idx)
-
-    paradas_con_coord = []
-    paradas_sin_coord = []
-
-    for clave, data in paradas.items():
-        pueblo = data["poblacion"]
-
-        if pueblo in coords:
-            lat, lon = coords[pueblo]
-            paradas_con_coord.append((clave, lat, lon))
-        else:
-            paradas_sin_coord.append(clave)
-
-    orden_paradas = []
-    lat_actual = LAT0
-    lon_actual = LON0
-    restantes = paradas_con_coord.copy()
-
-    while restantes:
-
-        distancias = []
-        for clave, lat, lon in restantes:
-            d = haversine(lat_actual, lon_actual, lat, lon)
-            distancias.append((d, clave, lat, lon))
-
-        distancias.sort(key=lambda x: (x[0], x[1]))
-        _, clave_sel, lat_sel, lon_sel = distancias[0]
-
-        orden_paradas.append(clave_sel)
-        lat_actual = lat_sel
-        lon_actual = lon_sel
-
-        restantes = [r for r in restantes if r[0] != clave_sel]
-
-    orden_paradas.extend(paradas_sin_coord)
-
-    orden_indices = []
-
-    for clave in orden_paradas:
-        indices = paradas[clave]["indices"]
-        indices_ordenados = sorted(
-            indices,
-            key=lambda i: df.loc[i, "_orden_original"]
-        )
-        orden_indices.extend(indices_ordenados)
-
-    df_final = df.loc[orden_indices].drop(
-        columns=["_orden_original", "_clave_parada"]
-    ).copy()
-
-    # ---- KM ENTRE PARADAS ----
-    kms = []
-    lat_actual = LAT0
-    lon_actual = LON0
-
-    for _, row in df_final.iterrows():
-        pueblo_norm = normalizar_texto(row["Población"])
-
-        if pueblo_norm in coords:
-            lat, lon = coords[pueblo_norm]
-            km = haversine(lat_actual, lon_actual, lat, lon)
-            kms.append(round(km, 1))
-            lat_actual = lat
-            lon_actual = lon
-        else:
-            kms.append(None)
-
-    df_final["Km_desde_anterior"] = kms
-
-    return df_final
+    return ordenar_dataframe_zrep(df, coords)
 
 
 # -------------------------------------------------
@@ -274,21 +162,52 @@ def reordenar_excel(input_path: Path, output_path: Path, ruta_coordenadas: Path)
 
         if nombre.startswith("ZREP_"):
             hojas_resultado[nombre] = ordenar_dataframe_zrep(df, coords)
-    
-        elif nombre == "HOSPITALES":
+
+        elif nombre in ("HOSPITALES", "FEDERACION"):
             hojas_resultado[nombre] = ordenar_hospitales(df, coords)
-    
-        elif nombre == "FEDERACION":
-            hojas_resultado[nombre] = ordenar_hospitales(df, coords)
-    
+
         else:
-            hojas_resultado[nombre] = df
+            hojas_resultado[nombre] = df.copy()
+
+    # -------------------------------------------------
+    # ORDEN FIJO DETERMINISTA
+    # -------------------------------------------------
+
+    orden_base = [
+        "METADATOS",
+        "RESUMEN_UNICO",
+        "RESUMEN_GENERAL",
+        "HOSPITALES",
+        "FEDERACION",
+        "RESUMEN_RUTAS_RESTO",
+    ]
+
+    zreps = sorted(
+        [n for n in hojas_resultado if n.startswith("ZREP_")]
+    )
+
+    otras = [
+        n for n in hojas_resultado
+        if n not in orden_base and not n.startswith("ZREP_")
+    ]
+
+    orden_final = []
+
+    for hoja in orden_base:
+        if hoja in hojas_resultado:
+            orden_final.append(hoja)
+
+    orden_final.extend(zreps)
+    orden_final.extend(otras)
+
+    # -------------------------------------------------
+    # ESCRITURA CONTROLADA
+    # -------------------------------------------------
 
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
-        for nombre, df in hojas_resultado.items():
-            df.to_excel(writer, sheet_name=nombre, index=False)
-
-
-
-
-
+        for nombre in orden_final:
+            hojas_resultado[nombre].to_excel(
+                writer,
+                sheet_name=nombre,
+                index=False
+            )
