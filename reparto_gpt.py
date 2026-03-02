@@ -525,7 +525,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
        set_widths(ws, [8, 18, 55, 70, 16, 12, 12, 22])
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    print("ORDEN EN MEMORIA:", wb_out.sheetnames)
+    st.write("ORDEN EN MEMORIA:", wb_out.sheetnames)
     wb_out.save(out_path)
 
 
@@ -560,7 +560,7 @@ def main():
     origen = prompt_origen()
 
     run(csv_p, reglas_p, out_p, origen)
-    #print(f"OK: generado {out_p}")
+    print(f"OK: generado {out_p}")
 
 if __name__ == "__main__":
     main()
