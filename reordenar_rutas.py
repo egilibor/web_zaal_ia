@@ -279,7 +279,7 @@ def reordenar_excel(input_path: Path, output_path: Path, ruta_coordenadas: Path)
         hojas_resultado[nombre] = ordenar_hospitales(df, coords)
 
     elif nombre == "FEDERACION":
-        hojas_resultado[nombre] = ordenar_dataframe_zrep(df, coords)
+        hojas_resultado[nombre] = ordenar_hospitales(df, coords)
 
     else:
         hojas_resultado[nombre] = df
@@ -287,5 +287,6 @@ def reordenar_excel(input_path: Path, output_path: Path, ruta_coordenadas: Path)
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
         for nombre, df in hojas_resultado.items():
             df.to_excel(writer, sheet_name=nombre, index=False)
+
 
 
