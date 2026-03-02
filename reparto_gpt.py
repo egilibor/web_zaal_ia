@@ -2,16 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 AGENTE CASTELLÓN · SALIDA DIARIA (HOSPITALES + FEDERACIÓN + RESTO POR Z.REP)
-
-Versión v3
-- Siempre pregunta por el "Origen de datos" (aunque pases argumentos).
-- Si falta algún dato (csv/reglas/out), entra en modo interactivo y lo pregunta.
-
-Uso rápido:
-    python agente_castellon_salida_diaria_v3.py
-
-Uso con argumentos:
-    python agente_castellon_salida_diaria_v3.py --csv "llegadas.csv" --reglas "reglas.xlsx" --out "Salida.xlsx"
+Versión para Streamlit
 """
 
 from __future__ import annotations
@@ -21,19 +12,24 @@ import os
 import datetime as _dt
 import re
 from pathlib import Path
-
-WORKDIR = Path(r"C:\REPARTO")
-DEFAULT_CSV = str(WORKDIR / "llegadas.csv")
-DEFAULT_REGLAS = str(WORKDIR / "Reglas_hospitales.xlsx")
-DEFAULT_OUT = str(WORKDIR / "salida.xlsx")
-
 from typing import List, Tuple
+import math
+from io import BytesIO
 
 import pandas as pd
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.dataframe import dataframe_to_rows
+
+# Configuración
+WORKDIR = Path(r"C:\REPARTO")
+DEFAULT_CSV = str(WORKDIR / "llegadas.csv")
+DEFAULT_REGLAS = str(WORKDIR / "Reglas_hospitales.xlsx")
+DEFAULT_OUT = str(WORKDIR / "salida.xlsx")
+ORIGEN_LAT = 39.804106
+ORIGEN_LON = -0.217351
+COORD_FILE = Path(__file__).parent / "Libro_de_Servicio_Castellon_con_coordenadas.xlsx"
 
 
 # -------------------------
@@ -101,36 +97,6 @@ def pick_col(columns: List[str], candidates: List[str]) -> str | None:
         if c in s:
             return c
     return None
-
-def prompt_path(label: str, default: str = "") -> Path:
-    while True:
-        raw = input(f"{label}{' ['+default+']' if default else ''}: ").strip()
-        if not raw and default:
-            raw = default
-        raw = raw.strip('"').strip("'")
-        p = Path(raw)
-        if p.exists():
-            return p
-        print(f"No existe: {p}")
-
-def prompt_out_path(label: str, default: str = "") -> Path:
-    while True:
-        raw = input(f"{label}{' ['+default+']' if default else ''}: ").strip()
-        if not raw and default:
-            raw = default
-        raw = raw.strip('"').strip("'")
-        p = Path(raw)
-        if p.suffix.lower() != ".xlsx":
-            print("La salida debe terminar en .xlsx")
-            continue
-        return p
-
-def prompt_origen() -> str:
-    while True:
-        origen = "LLEGADAS"
-        if origen:
-            return origen
-        print("Escribe un nombre (no lo dejo vacío).")
 
 
 # -------------------------
@@ -226,19 +192,22 @@ def safe_sheet_name(name: str, existing: set) -> str:
 def add_df_sheet(wb: Workbook, name: str, df_sheet: pd.DataFrame, widths: List[int]) -> None:
     ws = wb.create_sheet(title=name)
     out = df_sheet.copy()
-
     for row in dataframe_to_rows(out, index=False, header=True):
         ws.append(row)
     style_sheet(ws)
     set_widths(ws, widths)
 
+def reorder_sheets(wb, new_order):
+    """Fuerza el reordenamiento de las hojas según la lista new_order"""
+    for idx, sheet_name in enumerate(new_order):
+        if sheet_name in wb.sheetnames:
+            sheet = wb[sheet_name]
+            wb._sheets.insert(idx, wb._sheets.pop(wb._sheets.index(sheet)))
 
 
-import math
-
-ORIGEN_LAT = 39.804106
-ORIGEN_LON = -0.217351
-COORD_FILE = Path(__file__).parent / "Libro_de_Servicio_Castellon_con_coordenadas.xlsx"
+# -------------------------
+# Geografía y rutas
+# -------------------------
 
 def build_pueblo_coords():
     df = pd.read_excel(COORD_FILE)
@@ -288,6 +257,7 @@ def nearest_neighbor_route(pueblos, coords):
 
     return ruta
 
+
 # -------------------------
 # Core
 # -------------------------
@@ -335,7 +305,7 @@ def load_csv(csv_path: Path) -> pd.DataFrame:
     df["Dir_norm"] = df["Dirección"].apply(norm)
     return df
 
-def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
+def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> BytesIO:
     df = load_csv(csv_path)
 
     wb_rules = load_workbook(reglas_path, data_only=True)
@@ -443,7 +413,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
         }
     )
 
-    # PRIMERO: Calcular resumen_unico (antes de crear las hojas)
+    # Calcular resumen_unico
     resumen_unico_general = overview[overview["Bloque"].ne("RESTO (todas rutas)")].copy()
     resumen_unico_general.insert(0, "Tipo", "GENERAL")
     resumen_unico_general = resumen_unico_general.rename(columns={"Bloque": "Clave"})
@@ -464,12 +434,12 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
         ignore_index=True
     )
 
+    # Crear todas las hojas
     add_df_sheet(wb_out, "RESUMEN_UNICO", resumen_unico, widths=[6, 12, 28, 12, 14, 12, 12]) 
     add_df_sheet(wb_out, "METADATOS", meta, widths=[6, 22, 90])
     add_df_sheet(wb_out, "RESUMEN_GENERAL", overview, widths=[6, 22, 12, 14, 12])
 
-
-    # ---- NORMALIZAR HOSPITALES Y FEDERACION ----
+    # Normalizar HOSPITALES Y FEDERACION
     for col in COLUMNAS_BASE:
         if col not in hosp.columns:
             hosp[col] = ""
@@ -479,56 +449,61 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     hosp = hosp[COLUMNAS_BASE]
     fed = fed[COLUMNAS_BASE]
 
-    # ---- ESCRIBIR HOJAS OPERATIVAS ----
-    add_df_sheet(
-        wb_out,
-        "HOSPITALES",
-        hosp,
-        widths=[10, 20, 18, 55, 25, 12, 10, 10],
-    )
-
-    add_df_sheet(
-        wb_out,
-        "FEDERACION",
-        fed,
-        widths=[10, 20, 18, 55, 25, 12, 10, 10],
-    )
-
-    add_df_sheet(
-        wb_out,
-        "RESUMEN_RUTAS_RESTO",
-        resto_summary,
-        widths=[6, 18, 10, 14, 12, 12],
-    )
+    # Escribir hojas operativas
+    add_df_sheet(wb_out, "HOSPITALES", hosp, widths=[10, 20, 18, 55, 25, 12, 10, 10])
+    add_df_sheet(wb_out, "FEDERACION", fed, widths=[10, 20, 18, 55, 25, 12, 10, 10])
+    add_df_sheet(wb_out, "RESUMEN_RUTAS_RESTO", resto_summary, widths=[6, 18, 10, 14, 12, 12])
 
     existing = set(wb_out.sheetnames)
 
+    # Crear hojas por Z.Rep
     for z, sub in resto.groupby("Z.Rep"):
-       sheet_name = safe_sheet_name(f"ZREP_{z}", existing)
-       ws = wb_out.create_sheet(sheet_name)
-       out = sub.copy()
+        sheet_name = safe_sheet_name(f"ZREP_{z}", existing)
+        ws = wb_out.create_sheet(sheet_name)
+        out = sub.copy()
         
-       coords = build_pueblo_coords()
-       out["PUEBLO_NORM"] = out["Población"].apply(norm)
-       pueblos_unicos = list(dict.fromkeys(out["PUEBLO_NORM"].tolist()))
-       orden_pueblos = nearest_neighbor_route(pueblos_unicos, coords)
-       ranking = {p: i for i, p in enumerate(orden_pueblos)}
-       out["orden_pueblo"] = out["PUEBLO_NORM"].map(ranking).fillna(9999)
-       out = out.sort_values(["orden_pueblo"], kind="stable").reset_index(drop=True)
-       out = out.drop(columns=["PUEBLO_NORM", "orden_pueblo"])
-       out = out[COLUMNAS_BASE]
+        coords = build_pueblo_coords()
+        out["PUEBLO_NORM"] = out["Población"].apply(norm)
+        pueblos_unicos = list(dict.fromkeys(out["PUEBLO_NORM"].tolist()))
+        orden_pueblos = nearest_neighbor_route(pueblos_unicos, coords)
+        ranking = {p: i for i, p in enumerate(orden_pueblos)}
+        out["orden_pueblo"] = out["PUEBLO_NORM"].map(ranking).fillna(9999)
+        out = out.sort_values(["orden_pueblo"], kind="stable").reset_index(drop=True)
+        out = out.drop(columns=["PUEBLO_NORM", "orden_pueblo"])
+        out = out[COLUMNAS_BASE]
     
-       for row in dataframe_to_rows(out, index=False, header=True):
-           ws.append(row)
-       style_sheet(ws)
-       set_widths(ws, [8, 18, 55, 70, 16, 12, 12, 22])
+        for row in dataframe_to_rows(out, index=False, header=True):
+            ws.append(row)
+        style_sheet(ws)
+        set_widths(ws, [8, 18, 55, 70, 16, 12, 12, 22])
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    wb_out.save(out_path)
+    # FORZAR EL ORDEN DE LAS HOJAS
+    orden_deseado = [
+        "RESUMEN_UNICO",
+        "METADATOS", 
+        "RESUMEN_GENERAL",
+        "HOSPITALES",
+        "FEDERACION",
+        "RESUMEN_RUTAS_RESTO"
+    ] + [s for s in wb_out.sheetnames if s.startswith("ZREP_")]
+    
+    reorder_sheets(wb_out, orden_deseado)
+
+    # Guardar en BytesIO para Streamlit
+    output = BytesIO()
+    wb_out.save(output)
+    output.seek(0)
+    
+    # También guardar en archivo si se proporciona ruta
+    if out_path:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        wb_out.save(out_path)
+    
+    return output
 
 
 def main():
-    # Directorio de trabajo
+    # Versión para línea de comandos (opcional)
     try:
         if WORKDIR.exists():
             os.chdir(WORKDIR)
@@ -537,7 +512,7 @@ def main():
 
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument("--csv", help="Ruta al CSV de LLEGADAS.")
-    parser.add_argument("--reglas", help="Ruta al Excel de reglas (REGLAS_HOSPITALES + REGLAS_FEDERACION).")
+    parser.add_argument("--reglas", help="Ruta al Excel de reglas.")
     parser.add_argument("--out", help="Ruta de salida del Excel generado (.xlsx).")
     args = parser.parse_args()
 
@@ -545,17 +520,14 @@ def main():
     reglas_p = Path(args.reglas) if args.reglas else None
     out_p = Path(args.out) if args.out else None
 
-    # Interactivo para rutas si faltan
     if csv_p is None or not csv_p.exists():
-        csv_p = prompt_path("Ruta del CSV (LLEGADAS)", default=DEFAULT_CSV)
+        csv_p = Path(input(f"Ruta del CSV [ {DEFAULT_CSV} ]: ").strip() or DEFAULT_CSV)
     if reglas_p is None or not reglas_p.exists():
-        reglas_p = prompt_path("Ruta del Excel de reglas", default=DEFAULT_REGLAS)
+        reglas_p = Path(input(f"Ruta del Excel de reglas [ {DEFAULT_REGLAS} ]: ").strip() or DEFAULT_REGLAS)
     if out_p is None:
-        default_out = str(Path.cwd() / "Salida_diaria.xlsx")
-        out_p = prompt_out_path("Ruta de salida (.xlsx)", default=DEFAULT_OUT)
+        out_p = Path(input(f"Ruta de salida [ {DEFAULT_OUT} ]: ").strip() or DEFAULT_OUT)
 
-    # SIEMPRE preguntar origen (lo has pedido así)
-    origen = prompt_origen()
+    origen = "LLEGADAS"  # O podrías preguntarlo
 
     run(csv_p, reglas_p, out_p, origen)
     print(f"OK: generado {out_p}")
