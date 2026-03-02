@@ -523,23 +523,13 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
        style_sheet(ws)
        set_widths(ws, [8, 18, 55, 70, 16, 12, 12, 22])
 
-    orden_deseado = [
-        "METADATOS",
-        "RESUMEN_UNICO",
-        "RESUMEN_GENERAL",
-        "HOSPITALES",
-        "FEDERACION",
-        "RESUMEN_RUTAS_RESTO",
-    ]
-    # Reordenar hojas
-    sheets_dict = {ws.title: ws for ws in wb_out.worksheets}
-
-    wb_out._sheets = [
-        sheets_dict[name] for name in orden_deseado if name in sheets_dict
-    ] + [
-        ws for ws in wb_out.worksheets if ws.title not in orden_deseado
-    ]
-    
+    # --- Forzar posición de RESUMEN_UNICO detrás de METADATOS ---
+    if "RESUMEN_UNICO" in wb_out.sheetnames and "METADATOS" in wb_out.sheetnames:
+        ws_resumen = wb_out["RESUMEN_UNICO"]
+        wb_out._sheets.remove(ws_resumen)
+        idx_meta = wb_out.sheetnames.index("METADATOS")
+        wb_out._sheets.insert(idx_meta + 1, ws_resumen)
+        
     out_path.parent.mkdir(parents=True, exist_ok=True)
     wb_out.save(out_path)
 
