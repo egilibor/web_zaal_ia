@@ -475,8 +475,8 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     wb_out = wb_reorder
     # ===== FIN REORDENAMIENTO =====
     
-    wb_out = Workbook()
-    wb_out.remove(wb_out.active)
+    # wb_out = Workbook()
+    # wb_out.remove(wb_out.active)
     COLUMNAS_BASE = [
         "Exp",
         "Hospital",
