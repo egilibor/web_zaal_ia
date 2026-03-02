@@ -12,13 +12,8 @@ def generar_resumen_unico(ruta_excel: str) -> None:
     else:
         ws = wb.create_sheet("RESUMEN_UNICO")
 
-        # Mover justo después de METADATOS
-        if "METADATOS" in wb.sheetnames:
-            idx_meta = wb.sheetnames.index("METADATOS")
-            idx_resumen = wb.sheetnames.index("RESUMEN_UNICO")
-            wb.move_sheet("RESUMEN_UNICO", offset=idx_meta + 1 - idx_resumen)
-            # Detectar hojas operativas
-            operativas = []
+    # Detectar hojas operativas
+    operativas = []
 
     if "HOSPITALES" in wb.sheetnames:
         operativas.append("HOSPITALES")
@@ -50,7 +45,3 @@ def generar_resumen_unico(ruta_excel: str) -> None:
     ws.column_dimensions["D"].width = 15
 
     wb.save(ruta_excel)
-
-
-
-
