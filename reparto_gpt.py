@@ -523,8 +523,25 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
        style_sheet(ws)
        set_widths(ws, [8, 18, 55, 70, 16, 12, 12, 22])
 
-       out_path.parent.mkdir(parents=True, exist_ok=True)
-       wb_out.save(out_path)
+    orden_deseado = [
+        "METADATOS",
+        "RESUMEN_UNICO",
+        "RESUMEN_GENERAL",
+        "HOSPITALES",
+        "FEDERACION",
+        "RESUMEN_RUTAS_RESTO",
+    ]
+    # Reordenar hojas
+    sheets_dict = {ws.title: ws for ws in wb_out.worksheets}
+
+    wb_out._sheets = [
+        sheets_dict[name] for name in orden_deseado if name in sheets_dict
+    ] + [
+        ws for ws in wb_out.worksheets if ws.title not in orden_deseado
+    ]
+    
+   out_path.parent.mkdir(parents=True, exist_ok=True)
+   wb_out.save(out_path)
 
 
 def main():
