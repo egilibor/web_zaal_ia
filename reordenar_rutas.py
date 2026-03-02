@@ -47,8 +47,6 @@ def normalizar_texto(txt: str) -> str:
 
 def cargar_coordenadas(ruta: Path) -> dict:
     df = pd.read_excel(ruta)
-
-    # Normalizar cabeceras: quitar espacios y pasar a mayúsculas
     df.columns = df.columns.str.strip().str.upper()
 
     columnas_necesarias = {"PUEBLO", "LATITUD", "LONGITUD"}
@@ -71,39 +69,29 @@ def cargar_coordenadas(ruta: Path) -> dict:
 
     return coords
 
-    for _, row in df.iterrows():
-        pueblo = normalizar_texto(row["PUEBLO"])
-        lat = row["LATITUD"]
-        lon = row["LONGITUD"]
 
-        if pd.notna(pueblo) and pd.notna(lat) and pd.notna(lon):
-            coords[pueblo] = (float(lat), float(lon))
+# -------------------------------------------------
+# DISTANCIA REAL (HAVERSINE)
+# -------------------------------------------------
 
-    return coords
+def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    R = 6371
+    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
 
-    for _, row in df.iterrows():
-        pueblo = normalizar_texto(row["PUEBLO"])
-        lat = row["LATITUD"]
-        lon = row["LONGITUD"]
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
 
-        if pd.notna(pueblo) and pd.notna(lat) and pd.notna(lon):
-            coords[pueblo] = (float(lat), float(lon))
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    )
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
-    return coords
-
-
-def calcular_angulo_distancia(lat: float, lon: float):
-    dy = lat - LAT0
-    dx = lon - LON0
-
-    angulo = math.atan2(dy, dx)
-    distancia = math.sqrt(dx ** 2 + dy ** 2)
-
-    return angulo, distancia
+    return R * c
 
 
 # -------------------------------------------------
-# ORDENACIÓN POR HOJA
+# ORDENACIÓN POR HOJA ZREP
 # -------------------------------------------------
 
 def ordenar_dataframe_zrep(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
@@ -114,7 +102,6 @@ def ordenar_dataframe_zrep(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
 
     df = df.copy()
 
-    # Separar con y sin coordenadas
     filas_con_coord = []
     filas_sin_coord = []
 
@@ -135,50 +122,61 @@ def ordenar_dataframe_zrep(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
 
     while restantes:
 
-        # Calcular distancias desde punto actual
         distancias = []
-        for item in restantes:
-            idx, lat, lon = item
-            d = (lat - lat_actual) ** 2 + (lon - lon_actual) ** 2
+        for idx, lat, lon in restantes:
+            d = haversine(lat_actual, lon_actual, lat, lon)
             distancias.append((d, idx, lat, lon))
 
-        # Elegir el más cercano
         distancias.sort(key=lambda x: (x[0], x[1]))
-        d_min, idx_sel, lat_sel, lon_sel = distancias[0]
+        _, idx_sel, lat_sel, lon_sel = distancias[0]
 
         visitados.append(idx_sel)
-
-        # Actualizar punto actual
         lat_actual = lat_sel
         lon_actual = lon_sel
 
-        # Quitar seleccionado
         restantes = [r for r in restantes if r[0] != idx_sel]
 
-    # Añadir los sin coordenadas al final en orden original
     orden_final = visitados + filas_sin_coord
 
-    df_ordenado = df.loc[orden_final]
+    df_ordenado = df.loc[orden_final].copy()
+
+    # ---- KM ENTRE PARADAS ----
+    kms = []
+    lat_actual = LAT0
+    lon_actual = LON0
+
+    for _, row in df_ordenado.iterrows():
+        pueblo_norm = normalizar_texto(row["Población"])
+
+        if pueblo_norm in coords:
+            lat, lon = coords[pueblo_norm]
+            km = haversine(lat_actual, lon_actual, lat, lon)
+            kms.append(round(km, 1))
+            lat_actual = lat
+            lon_actual = lon
+        else:
+            kms.append(None)
+
+    df_ordenado["Km_desde_anterior"] = kms
 
     return df_ordenado
 
-# -------------------
+
+# -------------------------------------------------
 # ORDENAR HOSPITALES
-# -------------------
+# -------------------------------------------------
 
 def ordenar_hospitales(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
 
     df = df.copy()
     df["_orden_original"] = range(len(df))
 
-    # Crear clave de parada
     df["_clave_parada"] = (
         df["Consignatario"].apply(normalizar_texto)
         + "|"
         + df["Dirección"].apply(normalizar_texto)
     )
 
-    # Agrupar paradas
     paradas = {}
 
     for idx, row in df.iterrows():
@@ -190,7 +188,6 @@ def ordenar_hospitales(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
             }
         paradas[clave]["indices"].append(idx)
 
-    # Separar paradas con y sin coordenadas
     paradas_con_coord = []
     paradas_sin_coord = []
 
@@ -203,7 +200,6 @@ def ordenar_hospitales(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
         else:
             paradas_sin_coord.append(clave)
 
-    # Vecino más cercano entre paradas
     orden_paradas = []
     lat_actual = LAT0
     lon_actual = LON0
@@ -213,23 +209,20 @@ def ordenar_hospitales(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
 
         distancias = []
         for clave, lat, lon in restantes:
-            d = (lat - lat_actual) ** 2 + (lon - lon_actual) ** 2
+            d = haversine(lat_actual, lon_actual, lat, lon)
             distancias.append((d, clave, lat, lon))
 
-        distancias.sort(key=lambda x: x[0])
-        d_min, clave_sel, lat_sel, lon_sel = distancias[0]
+        distancias.sort(key=lambda x: (x[0], x[1]))
+        _, clave_sel, lat_sel, lon_sel = distancias[0]
 
         orden_paradas.append(clave_sel)
-
         lat_actual = lat_sel
         lon_actual = lon_sel
 
         restantes = [r for r in restantes if r[0] != clave_sel]
 
-    # Añadir sin coordenadas al final
     orden_paradas.extend(paradas_sin_coord)
 
-    # Reconstruir dataframe final
     orden_indices = []
 
     for clave in orden_paradas:
@@ -242,10 +235,30 @@ def ordenar_hospitales(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
 
     df_final = df.loc[orden_indices].drop(
         columns=["_orden_original", "_clave_parada"]
-    )
+    ).copy()
+
+    # ---- KM ENTRE PARADAS ----
+    kms = []
+    lat_actual = LAT0
+    lon_actual = LON0
+
+    for _, row in df_final.iterrows():
+        pueblo_norm = normalizar_texto(row["Población"])
+
+        if pueblo_norm in coords:
+            lat, lon = coords[pueblo_norm]
+            km = haversine(lat_actual, lon_actual, lat, lon)
+            kms.append(round(km, 1))
+            lat_actual = lat
+            lon_actual = lon
+        else:
+            kms.append(None)
+
+    df_final["Km_desde_anterior"] = kms
 
     return df_final
-    
+
+
 # -------------------------------------------------
 # FUNCIÓN PRINCIPAL
 # -------------------------------------------------
@@ -253,7 +266,6 @@ def ordenar_hospitales(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
 def reordenar_excel(input_path: Path, output_path: Path, ruta_coordenadas: Path):
 
     hojas = pd.read_excel(input_path, sheet_name=None)
-
     coords = cargar_coordenadas(ruta_coordenadas)
 
     hojas_resultado = {}
@@ -261,24 +273,14 @@ def reordenar_excel(input_path: Path, output_path: Path, ruta_coordenadas: Path)
     for nombre, df in hojas.items():
 
         if nombre.startswith("ZREP_"):
-            df_ordenado = ordenar_dataframe_zrep(df, coords)
-            hojas_resultado[nombre] = df_ordenado
-        
+            hojas_resultado[nombre] = ordenar_dataframe_zrep(df, coords)
+
         elif nombre == "HOSPITALES":
-            df_ordenado = ordenar_hospitales(df, coords)
-            hojas_resultado[nombre] = df_ordenado
-        
+            hojas_resultado[nombre] = ordenar_hospitales(df, coords)
+
         else:
-            hojas_resultado[nombre] = df 
+            hojas_resultado[nombre] = df
 
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
         for nombre, df in hojas_resultado.items():
-
             df.to_excel(writer, sheet_name=nombre, index=False)
-
-
-
-
-
-
-
