@@ -446,6 +446,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     )
 
     add_df_sheet(wb_out, "METADATOS", meta, widths=[6, 22, 90])
+    wb_out.create_sheet("RESUMEN_UNICO")
     add_df_sheet(wb_out, "RESUMEN_GENERAL", overview, widths=[6, 22, 12, 14, 12])
 
 
