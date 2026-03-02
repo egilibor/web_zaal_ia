@@ -1,6 +1,6 @@
-def generar_resumen_unico(path):
-    pass
-"""
+#def generar_resumen_unico(path):
+#    pass
+
 from openpyxl import load_workbook
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
@@ -49,7 +49,8 @@ def generar_resumen_unico(ruta_excel: str) -> None:
     ws.column_dimensions["D"].width = 15
 
     wb.save(ruta_excel)
-"""
+
+
 
 
 
