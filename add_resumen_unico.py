@@ -62,4 +62,6 @@ def generar_resumen_unico(ruta_excel: str) -> None:
     ws.column_dimensions["C"].width = 15
     ws.column_dimensions["D"].width = 15
 
+    wb.calculation.fullCalcOnLoad = True 
     wb.save(ruta_excel)
+
