@@ -523,15 +523,14 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
        style_sheet(ws)
        set_widths(ws, [8, 18, 55, 70, 16, 12, 12, 22])
 
-    # --- Forzar posición de RESUMEN_UNICO detrás de METADATOS ---
-    if "RESUMEN_UNICO" in wb_out.sheetnames and "METADATOS" in wb_out.sheetnames:
-        ws_resumen = wb_out["RESUMEN_UNICO"]
-        wb_out._sheets.remove(ws_resumen)
-        idx_meta = wb_out.sheetnames.index("METADATOS")
-        wb_out._sheets.insert(idx_meta + 1, ws_resumen)
-        
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    wb_out.save(out_path)
+# --- Mover RESUMEN_UNICO justo después de METADATOS ---
+if "RESUMEN_UNICO" in wb_out.sheetnames and "METADATOS" in wb_out.sheetnames:
+    idx_meta = wb_out.sheetnames.index("METADATOS")
+    idx_resumen = wb_out.sheetnames.index("RESUMEN_UNICO")
+    wb_out.move_sheet("RESUMEN_UNICO", offset=idx_meta + 1 - idx_resumen)
+    
+out_path.parent.mkdir(parents=True, exist_ok=True)
+wb_out.save(out_path)
 
 
 def main():
