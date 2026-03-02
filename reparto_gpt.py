@@ -417,28 +417,6 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
         }
     )
 
-    # RESUMEN_UNICO = GENERAL + RESTO desglosado
-    resumen_unico_general = overview[overview["Bloque"].ne("RESTO (todas rutas)")].copy()
-    resumen_unico_general.insert(0, "Tipo", "GENERAL")
-    resumen_unico_general = resumen_unico_general.rename(columns={"Bloque": "Clave"})
-    resumen_unico_general["Bultos"] = None
-    resumen_unico_general = resumen_unico_general[
-        ["Tipo", "Clave", "Paradas", "Expediciones", "Bultos", "Kilos"]
-    ]
-
-    resumen_unico_resto = resto_summary.copy()
-    resumen_unico_resto.insert(0, "Tipo", "RESTO")
-    resumen_unico_resto = resumen_unico_resto.rename(columns={"Z.Rep": "Clave"})
-    resumen_unico_resto = resumen_unico_resto[
-        ["Tipo", "Clave", "Paradas", "Expediciones", "Bultos", "Kilos"]
-    ]
-
-    resumen_unico = pd.concat(
-        [resumen_unico_general, resumen_unico_resto],
-        ignore_index=True
-    )
-
-
     wb_out = Workbook()
     wb_out.remove(wb_out.active)
     COLUMNAS_BASE = [
@@ -464,11 +442,33 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
             ],
         }
     )
-    
-    add_df_sheet(wb_out, "RESUMEN_UNICO", resumen_unico, widths=[6, 12, 28, 12, 14, 12, 12])
+
+    # PRIMERO: Calcular resumen_unico (antes de crear las hojas)
+    resumen_unico_general = overview[overview["Bloque"].ne("RESTO (todas rutas)")].copy()
+    resumen_unico_general.insert(0, "Tipo", "GENERAL")
+    resumen_unico_general = resumen_unico_general.rename(columns={"Bloque": "Clave"})
+    resumen_unico_general["Bultos"] = None
+    resumen_unico_general = resumen_unico_general[
+        ["Tipo", "Clave", "Paradas", "Expediciones", "Bultos", "Kilos"]
+    ]
+
+    resumen_unico_resto = resto_summary.copy()
+    resumen_unico_resto.insert(0, "Tipo", "RESTO")
+    resumen_unico_resto = resumen_unico_resto.rename(columns={"Z.Rep": "Clave"})
+    resumen_unico_resto = resumen_unico_resto[
+        ["Tipo", "Clave", "Paradas", "Expediciones", "Bultos", "Kilos"]
+    ]
+
+    resumen_unico = pd.concat(
+        [resumen_unico_general, resumen_unico_resto],
+        ignore_index=True
+    )
+
+    add_df_sheet(wb_out, "RESUMEN_UNICO", resumen_unico, widths=[6, 12, 28, 12, 14, 12, 12]) 
     add_df_sheet(wb_out, "METADATOS", meta, widths=[6, 22, 90])
     add_df_sheet(wb_out, "RESUMEN_GENERAL", overview, widths=[6, 22, 12, 14, 12])
-    
+
+
     # ---- NORMALIZAR HOSPITALES Y FEDERACION ----
     for col in COLUMNAS_BASE:
         if col not in hosp.columns:
@@ -523,8 +523,8 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
        style_sheet(ws)
        set_widths(ws, [8, 18, 55, 70, 16, 12, 12, 22])
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    wb_out.save(out_path)
+   out_path.parent.mkdir(parents=True, exist_ok=True)
+   wb_out.save(out_path)
 
 
 def main():
