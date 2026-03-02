@@ -438,45 +438,9 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
         ignore_index=True
     )
 
-        # ===== REORDENAMIENTO MANUAL Y DIRECTO =====
-    # Crear un nuevo workbook vacío
-    wb_reorder = Workbook()
-    wb_reorder.remove(wb_reorder.active)
-    
-    # Añadir las hojas en el orden deseado
-    orden_final = [
-        "RESUMEN_UNICO",
-        "METADATOS", 
-        "RESUMEN_GENERAL",
-        "HOSPITALES",
-        "FEDERACION",
-        "RESUMEN_RUTAS_RESTO"
-    ]
-    
-    # Añadir las ZREP ordenadas
-    zrep_sheets = sorted([s for s in wb_out.sheetnames if s.startswith("ZREP_")])
-    orden_final.extend(zrep_sheets)
-    
-    # Copiar cada hoja al nuevo workbook en el orden correcto
-    for sheet_name in orden_final:
-        if sheet_name in wb_out.sheetnames:
-            sheet = wb_out[sheet_name]
-            # Crear nueva hoja
-            new_sheet = wb_reorder.create_sheet(title=sheet_name)
-            # Copiar datos
-            for row in sheet.iter_rows(values_only=True):
-                new_sheet.append(row)
-            # Copiar estilos (simplificado)
-            for i, col in enumerate(sheet.columns, 1):
-                new_sheet.column_dimensions[get_column_letter(i)].width = \
-                    sheet.column_dimensions[get_column_letter(i)].width
-    
-    # Reemplazar el workbook original
-    wb_out = wb_reorder
-    # ===== FIN REORDENAMIENTO =====
-    
-    # wb_out = Workbook()
-    # wb_out.remove(wb_out.active)
+   
+    wb_out = Workbook()
+    wb_out.remove(wb_out.active)
     COLUMNAS_BASE = [
         "Exp",
         "Hospital",
