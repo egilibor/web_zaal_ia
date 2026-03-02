@@ -44,4 +44,27 @@ def generar_resumen_unico(ruta_excel: str) -> None:
     ws.column_dimensions["C"].width = 15
     ws.column_dimensions["D"].width = 15
 
+        # Ajuste ancho
+    ws.column_dimensions["A"].width = 20
+    ws.column_dimensions["B"].width = 15
+    ws.column_dimensions["C"].width = 15
+    ws.column_dimensions["D"].width = 15
+
+    # ---- FORZAR ORDEN DEFINITIVO ----
+    orden_fijo = [
+        "METADATOS",
+        "RESUMEN_UNICO",
+        "RESUMEN_GENERAL",
+        "HOSPITALES",
+        "FEDERACION",
+        "RESUMEN_RUTAS_RESTO",
+    ]
+
+    # Añadir ZREP_* al final
+    zrep = sorted([s for s in wb.sheetnames if s.startswith("ZREP_")])
+    orden_fijo.extend(zrep)
+
+    wb._sheets = [wb[name] for name in orden_fijo if name in wb.sheetnames]
+
     wb.save(ruta_excel)
+
