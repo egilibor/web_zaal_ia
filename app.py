@@ -111,9 +111,9 @@ with tab1:
                     # Ejecutamos módulo de resumen
                     importlib.reload(add_resumen_unico)
                     add_resumen_unico.generar_resumen_unico(str(salida_path))
-                    st.warning("add_resumen_unico ejecutado")
+                    #st.warning("add_resumen_unico ejecutado")
 
-                    st.success("Archivo generado correctamente")
+                    #st.success("Archivo generado correctamente")
 
                     st.download_button(
                         "Descargar archivo generado",
@@ -179,6 +179,7 @@ with tab2:
 
     else:
         st.info("Sube el archivo para activar la reordenación.")
+
 
 
 
