@@ -7,9 +7,8 @@ from pathlib import Path
 
 import streamlit as st
 from reordenar_rutas import reordenar_excel
-from add_resumen_unico import generar_resumen_unico
-st.write("Ruta real add_resumen_unico:", generar_resumen_unico.__code__.co_filename)
-st.write("Ruta add_resumen_unico:", generar_resumen_unico.__code__.co_filename)
+import importlib
+import add_resumen_unico
 
 # ==========================================================
 # CONFIG
@@ -110,7 +109,8 @@ with tab1:
                     st.info(f"Archivo generado: {nombre_salida}")
 
                     # Ejecutamos módulo de resumen
-                    generar_resumen_unico(str(salida_path))
+                    importlib.reload(add_resumen_unico)
+                    add_resumen_unico.generar_resumen_unico(str(salida_path))
                     st.warning("add_resumen_unico ejecutado")
 
                     st.success("Archivo generado correctamente")
@@ -175,5 +175,6 @@ with tab2:
 
     else:
         st.info("Sube el archivo para activar la reordenación.")
+
 
 
