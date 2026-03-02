@@ -100,7 +100,6 @@ with tab1:
                 salida = workdir / "salida.xlsx"
                 if salida.exists():
                     generar_resumen_unico(str(salida))
-                    st.warning("ENTRO EN generar_resumen_unico")
                     st.success("Archivo generado correctamente")
 
                     st.download_button(
@@ -162,6 +161,7 @@ with tab2:
 
     else:
         st.info("Sube el archivo para activar la reordenación.")
+
 
 
 
