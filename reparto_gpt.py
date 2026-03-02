@@ -560,7 +560,7 @@ def main():
     origen = prompt_origen()
 
     run(csv_p, reglas_p, out_p, origen)
-    print(f"OK: generado {out_p}")
+    #print(f"OK: generado {out_p}")
 
 if __name__ == "__main__":
     main()
