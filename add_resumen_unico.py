@@ -3,6 +3,7 @@ from openpyxl.styles import Font
 
 
 def generar_resumen_unico(ruta_excel: str) -> None:
+    raise Exception("ESTOY EN ADD_RESUMEN_UNICO")
     wb = load_workbook(ruta_excel)
 
     # Reutilizar hoja si existe
@@ -45,5 +46,6 @@ def generar_resumen_unico(ruta_excel: str) -> None:
     ws.column_dimensions["D"].width = 15
 
     wb.save(ruta_excel)
+
 
 
