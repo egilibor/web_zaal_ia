@@ -1,14 +1,16 @@
 from openpyxl import load_workbook
 from openpyxl.styles import Font
-from openpyxl.utils import get_column_letter
 
 
 def generar_resumen_unico(ruta_excel: str) -> None:
     wb = load_workbook(ruta_excel)
 
-    # Eliminar hoja existente si existe
+    # Reutilizar hoja si existe
     if "RESUMEN_UNICO" in wb.sheetnames:
-        del wb["RESUMEN_UNICO"]
+        ws = wb["RESUMEN_UNICO"]
+        ws.delete_rows(1, ws.max_row)
+    else:
+        ws = wb.create_sheet("RESUMEN_UNICO")
 
     # Detectar hojas operativas
     operativas = []
@@ -21,9 +23,6 @@ def generar_resumen_unico(ruta_excel: str) -> None:
 
     zrep = sorted([s for s in wb.sheetnames if s.startswith("ZREP_")])
     operativas.extend(zrep)
-
-    # Crear hoja nueva
-    ws = wb.create_sheet("RESUMEN_UNICO")
 
     # Cabecera
     ws.append(["Clave", "Expediciones", "Bultos", "Kilos"])
@@ -39,7 +38,7 @@ def generar_resumen_unico(ruta_excel: str) -> None:
             f"=SUM('{hoja}'!G:G)"
         ])
 
-    # Ajuste simple de ancho
+    # Ajuste ancho
     ws.column_dimensions["A"].width = 20
     ws.column_dimensions["B"].width = 15
     ws.column_dimensions["C"].width = 15
