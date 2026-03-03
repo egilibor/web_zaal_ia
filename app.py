@@ -11,6 +11,7 @@ import importlib
 import add_resumen_unico
 from modulo_valencia_gestores import generar_libros_gestores
 
+
 # ==========================================================
 # CONFIG
 # ==========================================================
@@ -18,9 +19,10 @@ from modulo_valencia_gestores import generar_libros_gestores
 st.set_page_config(page_title="Reparto determinista", layout="wide")
 st.title("Reparto determinista")
 
-# -----------------------------------
+
+# ----------------------------------------------------------
 # SELECCIÓN DE DELEGACIÓN
-# -----------------------------------
+# ----------------------------------------------------------
 
 delegacion = st.selectbox(
     "Delegación",
@@ -35,12 +37,14 @@ if delegacion == "Castellón":
     COORDENADAS_REPO = REPO_DIR / "Libro_Servicio_Castellon.xlsx"
     LAT0 = 39.804106
     LON0 = -0.217351
+
 elif delegacion == "Valencia":
     REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
     COORDENADAS_REPO = REPO_DIR / "valencia_municipios_coordenadas.xlsx"
     LAT0 = 39.44068
     LON0 = -0.42592
-    
+
+
 # ==========================================================
 # WORKDIR POR SESIÓN
 # ==========================================================
@@ -91,13 +95,11 @@ with tab1:
         input_csv = workdir / "llegadas.csv"
         input_csv.write_bytes(csv_file.getbuffer())
 
-        # Copiamos reglas al workdir
         reglas_path = workdir / "Reglas_hospitales.xlsx"
         reglas_path.write_bytes(REGLAS_REPO.read_bytes())
 
         if st.button("Generar reparto", key="fase1_btn"):
 
-            # 🔹 Nombre único por ejecución
             unique_id = uuid.uuid4().hex[:10]
             nombre_salida = f"rutas_{unique_id}.xlsx"
             salida_path = workdir / nombre_salida
@@ -124,14 +126,10 @@ with tab1:
             else:
                 if salida_path.exists():
 
-                    st.info(f"Archivo generado: {nombre_salida}")
-
-                    # Ejecutamos módulo de resumen
                     importlib.reload(add_resumen_unico)
                     add_resumen_unico.generar_resumen_unico(str(salida_path))
-                    #st.warning("add_resumen_unico ejecutado")
 
-                    #st.success("Archivo generado correctamente")
+                    st.success("Archivo generado correctamente")
 
                     st.download_button(
                         "Descargar archivo generado",
@@ -141,6 +139,7 @@ with tab1:
                     )
                 else:
                     st.error("No se generó el archivo de salida")
+
     else:
         st.info("Sube un CSV para habilitar la ejecución.")
 
@@ -177,13 +176,12 @@ with tab2:
                     lat_origen=LAT0,
                     lon_origen=LON0,
                 )
-                
-                
-                # 🔁 Regenerar RESUMEN_UNICO tras reordenar
+
                 importlib.reload(add_resumen_unico)
                 add_resumen_unico.generar_resumen_unico(str(output_path))
 
                 if output_path.exists():
+
                     st.success("Rutas reordenadas correctamente")
 
                     st.download_button(
@@ -192,6 +190,40 @@ with tab2:
                         file_name=output_unique,
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     )
+
+                    # ==========================================================
+                    # VALENCIA · GENERAR LIBROS POR GESTOR
+                    # ==========================================================
+
+                    if delegacion == "Valencia":
+
+                        st.divider()
+                        st.subheader("Distribución por gestores")
+
+                        if st.button("Generar libros gestores", key="valencia_gestores_btn"):
+
+                            resultado = generar_libros_gestores(
+                                ruta_excel_final=str(output_path),
+                                ruta_asignacion=str(REPO_DIR / "gestor_zonas.xlsx"),
+                                carpeta_salida=str(workdir)
+                            )
+
+                            if not resultado["ok"]:
+                                for error in resultado["errores"]:
+                                    st.error(error)
+                            else:
+                                st.success("Libros por gestor generados correctamente")
+
+                                for gestor, ruta in resultado["archivos_generados"].items():
+                                    with open(ruta, "rb") as f:
+                                        st.download_button(
+                                            label=f"Descargar {gestor}",
+                                            data=f,
+                                            file_name=Path(ruta).name,
+                                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                            key=f"download_{gestor}"
+                                        )
+
                 else:
                     st.error("No se generó el archivo reordenado.")
 
@@ -200,13 +232,3 @@ with tab2:
 
     else:
         st.info("Sube el archivo para activar la reordenación.")
-
-
-
-
-
-
-
-
-
-
