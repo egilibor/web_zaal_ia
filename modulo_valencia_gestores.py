@@ -6,6 +6,11 @@ import pandas as pd
 from openpyxl import load_workbook, Workbook
 
 
+def _normalizar(texto: str) -> str:
+    """Normaliza texto para cruces seguros sin alterar el original."""
+    return " ".join(str(texto).strip().split())
+
+
 def generar_libros_gestores(
     ruta_excel_final: str,
     ruta_asignacion: str,
@@ -39,13 +44,18 @@ def generar_libros_gestores(
         # -------------------------------------------------
         wb_origen = load_workbook(ruta_excel_final, data_only=False)
         hojas_libro = wb_origen.sheetnames
-        zonas_libro = [h for h in hojas_libro if h.startswith("ZREP_")]
 
-        if not zonas_libro:
+        zonas_libro_raw = [h for h in hojas_libro if h.startswith("ZREP_")]
+
+        if not zonas_libro_raw:
             resultado["errores"].append(
                 "No se han encontrado hojas territoriales (ZREP_*) en el libro final."
             )
             return resultado
+
+        # Mapa normalizado → nombre real hoja
+        mapa_hojas = {_normalizar(z): z for z in zonas_libro_raw}
+        zonas_libro_set = set(mapa_hojas.keys())
 
         # -------------------------------------------------
         # 3. Leer asignación
@@ -58,7 +68,7 @@ def generar_libros_gestores(
             )
             return resultado
 
-        df_asignacion["ZONA_REP"] = df_asignacion["ZONA_REP"].astype(str).str.strip()
+        df_asignacion["ZONA_REP"] = df_asignacion["ZONA_REP"].apply(_normalizar)
         df_asignacion["GESTOR"] = df_asignacion["GESTOR"].astype(str).str.strip()
 
         duplicadas = df_asignacion["ZONA_REP"][df_asignacion["ZONA_REP"].duplicated()]
@@ -75,8 +85,6 @@ def generar_libros_gestores(
         # -------------------------------------------------
         # 4. Validación cruzada
         # -------------------------------------------------
-        zonas_libro_set = set(zonas_libro)
-
         zonas_sin_gestor = zonas_libro_set - zonas_asignadas
         if zonas_sin_gestor:
             resultado["errores"].append(
@@ -96,11 +104,11 @@ def generar_libros_gestores(
         # -------------------------------------------------
         for gestor in gestores_detectados:
 
-            zonas_gestor = [
-                z for z in zonas_libro if mapa_zona_gestor[z] == gestor
+            zonas_gestor_norm = [
+                z for z in zonas_libro_set if mapa_zona_gestor[z] == gestor
             ]
 
-            if not zonas_gestor:
+            if not zonas_gestor_norm:
                 continue
 
             wb_nuevo = Workbook()
@@ -108,38 +116,31 @@ def generar_libros_gestores(
 
             dfs_todo = []
 
-            for zona in zonas_gestor:
-                ws_origen = wb_origen[zona]
-                ws_nueva = wb_nuevo.create_sheet(title=zona)
+            for zona_norm in zonas_gestor_norm:
 
-                datos = []
-                for row in ws_origen.iter_rows(values_only=True):
-                    datos.append(list(row))
+                zona_real = mapa_hojas[zona_norm]
+                ws_origen = wb_origen[zona_real]
+                ws_nueva = wb_nuevo.create_sheet(title=zona_real)
 
+                datos = [list(row) for row in ws_origen.iter_rows(values_only=True)]
                 if not datos:
                     continue
 
                 encabezados = datos[0]
                 filas = datos[1:]
 
-                # Escribir hoja zona
                 ws_nueva.append(encabezados)
                 for fila in filas:
                     ws_nueva.append(fila)
 
-                # Construir dataframe para TODO
                 df_zona = pd.DataFrame(filas, columns=encabezados)
-                df_zona["ZONA"] = zona
+                df_zona["ZONA"] = zona_real
                 dfs_todo.append(df_zona)
 
             # -------------------------------------------------
-            # Construir TODO
+            # TODO
             # -------------------------------------------------
-            if dfs_todo:
-                df_todo = pd.concat(dfs_todo, ignore_index=True)
-            else:
-                df_todo = pd.DataFrame()
-
+            df_todo = pd.concat(dfs_todo, ignore_index=True) if dfs_todo else pd.DataFrame()
             ws_todo = wb_nuevo.create_sheet(title="TODO")
 
             if not df_todo.empty:
@@ -148,14 +149,14 @@ def generar_libros_gestores(
                     ws_todo.append(row.tolist())
 
             # -------------------------------------------------
-            # Construir RESUMEN_UNICO (con fórmulas)
+            # RESUMEN_UNICO (Excel español)
             # -------------------------------------------------
             ws_resumen = wb_nuevo.create_sheet(title="RESUMEN_UNICO")
 
             ws_resumen["A1"] = "Total expediciones"
-            ws_resumen["B1"] = "=COUNTARA(TODO!A:A)-1"
+            ws_resumen["B1"] = "=CONTARA(TODO!A:A)-1"
 
-            # Buscar columna Kgs
+            # Total Kgs
             if "Kgs" in df_todo.columns:
                 col_kgs = df_todo.columns.get_loc("Kgs") + 1
                 col_letter = ws_todo.cell(row=1, column=col_kgs).column_letter
@@ -167,6 +168,9 @@ def generar_libros_gestores(
             ws_resumen["A4"] = "Totales por zona"
 
             if not df_todo.empty:
+                col_zona = df_todo.columns.get_loc("ZONA") + 1
+                col_zona_letter = ws_todo.cell(row=1, column=col_zona).column_letter
+
                 zonas_unicas = sorted(df_todo["ZONA"].unique())
                 fila_inicio = 5
 
@@ -174,7 +178,7 @@ def generar_libros_gestores(
                     fila_actual = fila_inicio + i
                     ws_resumen[f"A{fila_actual}"] = zona
                     ws_resumen[f"B{fila_actual}"] = (
-                        f'=CONTAR.SI(TODO!{ws_todo["A1"].column_letter}:{ws_todo["A1"].column_letter},"*")'
+                        f'=CONTAR.SI(TODO!{col_zona_letter}:{col_zona_letter};"{zona}")'
                     )
 
             # -------------------------------------------------
