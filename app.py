@@ -173,7 +173,10 @@ with tab2:
                     input_path=input_path,
                     output_path=output_path,
                     ruta_coordenadas=COORDENADAS_REPO,
+                    lat_origen=LAT0,
+                    lon_origen=LON0,
                 )
+                
                 
                 # 🔁 Regenerar RESUMEN_UNICO tras reordenar
                 importlib.reload(add_resumen_unico)
@@ -196,6 +199,7 @@ with tab2:
 
     else:
         st.info("Sube el archivo para activar la reordenación.")
+
 
 
 
