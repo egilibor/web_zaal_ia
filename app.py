@@ -17,12 +17,26 @@ import add_resumen_unico
 st.set_page_config(page_title="Reparto determinista", layout="wide")
 st.title("Reparto determinista")
 
+# -----------------------------------
+# SELECCIÓN DE DELEGACIÓN
+# -----------------------------------
+
+delegacion = st.selectbox(
+    "Delegación",
+    ["Castellón", "Valencia"]
+)
+
 REPO_DIR = Path(__file__).resolve().parent
 SCRIPT_REPARTO = REPO_DIR / "reparto_gpt.py"
-REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
-COORDENADAS_REPO = REPO_DIR / "Libro_de_Servicio_Castellon_con_coordenadas.xlsx"
 
+if delegacion == "Castellón":
+    REGLAS_REPO = REPO_DIR / "Reglas_castellon.xlsx"
+    COORDENADAS_REPO = REPO_DIR / "Libro_Servicio_Castellon.xlsx"
 
+elif delegacion == "Valencia":
+    #REGLAS_REPO = REPO_DIR / "Reglas_valencia.xlsx"
+    COORDENADAS_REPO = REPO_DIR / "valencia_municipios_coordenadas.xlsx"
+    
 # ==========================================================
 # WORKDIR POR SESIÓN
 # ==========================================================
@@ -179,6 +193,7 @@ with tab2:
 
     else:
         st.info("Sube el archivo para activar la reordenación.")
+
 
 
 
