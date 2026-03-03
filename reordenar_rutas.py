@@ -4,11 +4,8 @@ import pandas as pd
 
 
 # -------------------------------------------------
-# CONSTANTES
+# COLUMNAS OBLIGATORIAS
 # -------------------------------------------------
-
-LAT0 = 39.804106
-LON0 = -0.217351
 
 COLUMNAS_OBLIGATORIAS = [
     "Exp",
@@ -93,7 +90,7 @@ def haversine(lat1, lon1, lat2, lon2):
 # ORDENACIÓN ZREP
 # -------------------------------------------------
 
-def ordenar_dataframe_zrep(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
+def ordenar_dataframe_zrep(df: pd.DataFrame, coords: dict, lat_origen: float, lon_origen: float) -> pd.DataFrame:
 
     for col in COLUMNAS_OBLIGATORIAS:
         if col not in df.columns:
@@ -115,8 +112,8 @@ def ordenar_dataframe_zrep(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
     visitados = []
     restantes = filas_con_coord.copy()
 
-    lat_actual = LAT0
-    lon_actual = LON0
+    lat_actual = lat_origen
+    lon_actual = lon_origen
 
     while restantes:
         distancias = [
@@ -143,15 +140,21 @@ def ordenar_dataframe_zrep(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
 # ORDENACIÓN HOSPITALES
 # -------------------------------------------------
 
-def ordenar_hospitales(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
-    return ordenar_dataframe_zrep(df, coords)
+def ordenar_hospitales(df: pd.DataFrame, coords: dict, lat_origen: float, lon_origen: float) -> pd.DataFrame:
+    return ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen)
 
 
 # -------------------------------------------------
 # FUNCIÓN PRINCIPAL
 # -------------------------------------------------
 
-def reordenar_excel(input_path: Path, output_path: Path, ruta_coordenadas: Path):
+def reordenar_excel(
+    input_path: Path,
+    output_path: Path,
+    ruta_coordenadas: Path,
+    lat_origen: float,
+    lon_origen: float,
+):
 
     hojas = pd.read_excel(input_path, sheet_name=None)
     coords = cargar_coordenadas(ruta_coordenadas)
@@ -161,10 +164,10 @@ def reordenar_excel(input_path: Path, output_path: Path, ruta_coordenadas: Path)
     for nombre, df in hojas.items():
 
         if nombre.startswith("ZREP_"):
-            hojas_resultado[nombre] = ordenar_dataframe_zrep(df, coords)
+            hojas_resultado[nombre] = ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen)
 
         elif nombre in ("HOSPITALES", "FEDERACION"):
-            hojas_resultado[nombre] = ordenar_hospitales(df, coords)
+            hojas_resultado[nombre] = ordenar_hospitales(df, coords, lat_origen, lon_origen)
 
         else:
             hojas_resultado[nombre] = df.copy()
