@@ -30,11 +30,11 @@ REPO_DIR = Path(__file__).resolve().parent
 SCRIPT_REPARTO = REPO_DIR / "reparto_gpt.py"
 
 if delegacion == "Castellón":
-    REGLAS_REPO = REPO_DIR / "Reglas_castellon.xlsx"
+    REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
     COORDENADAS_REPO = REPO_DIR / "Libro_Servicio_Castellon.xlsx"
 
 elif delegacion == "Valencia":
-    #REGLAS_REPO = REPO_DIR / "Reglas_valencia.xlsx"
+    REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
     COORDENADAS_REPO = REPO_DIR / "valencia_municipios_coordenadas.xlsx"
     
 # ==========================================================
@@ -193,6 +193,7 @@ with tab2:
 
     else:
         st.info("Sube el archivo para activar la reordenación.")
+
 
 
 
