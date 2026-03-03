@@ -49,9 +49,23 @@ def generar_libros_gestores(
 
         # Fecha del sistema
         fecha_hoy = datetime.today().strftime("%Y-%m-%d")
-
+        
+        #-----------------------------#
         # TODO: aquí irá la lógica real
+        #-----------------------------#
+        
+        # 1️⃣ Cargar libro final
+        wb_origen = load_workbook(ruta_excel_final, data_only=False)
+        hojas_libro = wb_origen.sheetnames
 
+        # 2️⃣ Detectar hojas territoriales
+        zonas_libro = [h for h in hojas_libro if h.startswith("ZREP_")]
+
+        if not zonas_libro:
+            resultado["errores"].append(
+                "No se han encontrado hojas territoriales (ZREP_*) en el libro final."
+            )
+            return resultado
         resultado["ok"] = True
         return resultado
 
