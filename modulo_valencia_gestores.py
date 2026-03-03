@@ -153,7 +153,7 @@ def generar_libros_gestores(
             ws_resumen = wb_nuevo.create_sheet(title="RESUMEN_UNICO")
 
             ws_resumen["A1"] = "Total expediciones"
-            ws_resumen["B1"] = "=COUNTA(TODO!A:A)-1"
+            ws_resumen["B1"] = "=COUNTARA(TODO!A:A)-1"
 
             # Buscar columna Kgs
             if "Kgs" in df_todo.columns:
@@ -161,7 +161,7 @@ def generar_libros_gestores(
                 col_letter = ws_todo.cell(row=1, column=col_kgs).column_letter
 
                 ws_resumen["A2"] = "Total Kgs"
-                ws_resumen["B2"] = f"=SUM(TODO!{col_letter}:{col_letter})"
+                ws_resumen["B2"] = f"=SUMA(TODO!{col_letter}:{col_letter})"
 
             # Totales por zona
             ws_resumen["A4"] = "Totales por zona"
@@ -174,7 +174,7 @@ def generar_libros_gestores(
                     fila_actual = fila_inicio + i
                     ws_resumen[f"A{fila_actual}"] = zona
                     ws_resumen[f"B{fila_actual}"] = (
-                        f'=COUNTIF(TODO!{ws_todo["A1"].column_letter}:{ws_todo["A1"].column_letter},"*")'
+                        f'=CONTAR.SI(TODO!{ws_todo["A1"].column_letter}:{ws_todo["A1"].column_letter},"*")'
                     )
 
             # -------------------------------------------------
