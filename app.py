@@ -201,7 +201,7 @@ with tab2:
                         st.subheader("Distribución por gestores")
 
                         if st.button("Generar libros gestores", key="valencia_gestores_btn"):
-
+                            st.write("Botón pulsado")
                             resultado = generar_libros_gestores(
                                 ruta_excel_final=str(output_path),
                                 ruta_asignacion=str(REPO_DIR / "gestor_zonas.xlsx"),
@@ -232,3 +232,4 @@ with tab2:
 
     else:
         st.info("Sube el archivo para activar la reordenación.")
+
