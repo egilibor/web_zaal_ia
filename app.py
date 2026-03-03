@@ -191,50 +191,7 @@ with tab2:
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     )
 
-                    # ==========================================================
-                    # VALENCIA · DISTRIBUCIÓN POR GESTORES (SUBIDA MANUAL)
-                    # ==========================================================
-                    
-                    if delegacion == "Valencia":
-                    
-                        st.divider()
-                        st.subheader("Distribución por gestores")
-                    
-                        archivo_reordenado_final = st.file_uploader(
-                            "Subir archivo reordenado definitivo",
-                            type=["xlsx"],
-                            key="valencia_excel_final"
-                        )
-                    
-                        if archivo_reordenado_final:
-                    
-                            ruta_final = workdir / f"final_valencia_{uuid.uuid4().hex[:8]}.xlsx"
-                            ruta_final.write_bytes(archivo_reordenado_final.getbuffer())
-                    
-                            if st.button("Generar libros gestores", key="valencia_gestores_btn"):
-                    
-                                resultado = generar_libros_gestores(
-                                    ruta_excel_final=str(ruta_final),
-                                    ruta_asignacion=str(REPO_DIR / "gestor_zonas.xlsx"),
-                                    carpeta_salida=str(workdir)
-                                )
-                    
-                                if not resultado["ok"]:
-                                    for error in resultado["errores"]:
-                                        st.error(error)
-                                else:
-                                    st.success("Libros por gestor generados correctamente")
-                    
-                                    for gestor, ruta in resultado["archivos_generados"].items():
-                                        with open(ruta, "rb") as f:
-                                            st.download_button(
-                                                label=f"Descargar {gestor}",
-                                                data=f,
-                                                file_name=Path(ruta).name,
-                                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                                key=f"download_{gestor}"
-                                            )
-                 else:
+                else:
                     st.error("No se generó el archivo reordenado.")
 
             except Exception as e:
@@ -243,4 +200,46 @@ with tab2:
     else:
         st.info("Sube el archivo para activar la reordenación.")
 
+    # ==========================================================
+    # VALENCIA · DISTRIBUCIÓN POR GESTORES (SIEMPRE VISIBLE EN TAB2)
+    # ==========================================================
 
+    if delegacion == "Valencia":
+
+        st.divider()
+        st.subheader("Distribución por gestores")
+
+        archivo_reordenado_final = st.file_uploader(
+            "Subir archivo reordenado definitivo",
+            type=["xlsx"],
+            key="valencia_excel_final"
+        )
+
+        if archivo_reordenado_final:
+
+            ruta_final = workdir / f"final_valencia_{uuid.uuid4().hex[:8]}.xlsx"
+            ruta_final.write_bytes(archivo_reordenado_final.getbuffer())
+
+            if st.button("Generar libros gestores", key="valencia_gestores_btn"):
+
+                resultado = generar_libros_gestores(
+                    ruta_excel_final=str(ruta_final),
+                    ruta_asignacion=str(REPO_DIR / "gestor_zonas.xlsx"),
+                    carpeta_salida=str(workdir)
+                )
+
+                if not resultado["ok"]:
+                    for error in resultado["errores"]:
+                        st.error(error)
+                else:
+                    st.success("Libros por gestor generados correctamente")
+
+                    for gestor, ruta in resultado["archivos_generados"].items():
+                        with open(ruta, "rb") as f:
+                            st.download_button(
+                                label=f"Descargar {gestor}",
+                                data=f,
+                                file_name=Path(ruta).name,
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                key=f"download_{gestor}"
+                            )
