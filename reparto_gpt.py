@@ -182,8 +182,13 @@ def run(csv_path: Path,
     existing = set()
 
     for z, sub in df.groupby("Z.Rep"):
-        sheet_name = f"ZREP_{z}"
+
+        sheet_name_raw = f"ZREP_{z}"
+        sheet_name = re.sub(r"[\\/*\[\]:\?]", " ", sheet_name_raw)
+        sheet_name = re.sub(r"\s+", " ", sheet_name).strip()
+        sheet_name = sheet_name[:31]  # límite Excel
         ws = wb_out.create_sheet(title=sheet_name)
+    
 
         out = sub.copy()
         out["PUEBLO_NORM"] = out["Población"].apply(norm)
