@@ -157,15 +157,33 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     style_sheet(ws_f)
 
     # ZREP
+    existing = set(wb_out.sheetnames)
     for z, sub in resto.groupby("Z.Rep"):
+    
         nombre = f"ZREP_{z}"
+    
+        # 1. Limpiar caracteres no válidos
         nombre = re.sub(r"[\\/*?:\[\]]", "_", nombre)
-        ws = wb_out.create_sheet(nombre)
+    
+        # 2. Limitar a 31 caracteres (máximo Excel)
+        nombre = nombre[:31]
+    
+        # 3. Garantizar unicidad
+        base = nombre
+        i = 1
+        while nombre in existing:
+            sufijo = f"_{i}"
+            nombre = (base[:31 - len(sufijo)] + sufijo)
+            i += 1
+    
+        existing.add(nombre)
 
-        for row in dataframe_to_rows(sub[COLUMNAS_BASE], index=False, header=True):
-            ws.append(row)
+    ws = wb_out.create_sheet(nombre)
 
-        style_sheet(ws)
+    for row in dataframe_to_rows(sub[COLUMNAS_BASE], index=False, header=True):
+        ws.append(row)
+
+    style_sheet(ws)
 
     # -----------------------------
     # RESUMEN_UNICO (AL FINAL)
@@ -182,7 +200,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     zrep_sheets = sorted([s for s in wb_out.sheetnames if s.startswith("ZREP_")])
     operativas.extend(zrep_sheets)
 
-    ws_res = wb_out.create_sheet("RESUMEN_UNICO", 0)
+    ws_res = wb_out.create_sheet("RESUMEN_UNICO")
     ws_res.append(["Clave", "Expediciones", "Bultos", "Kilos"])
     
     for hoja in operativas:
