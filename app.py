@@ -100,8 +100,12 @@ with tab1:
 
         if st.button("Generar reparto", key="fase1_btn"):
 
-            unique_id = uuid.uuid4().hex[:10]
-            nombre_salida = f"rutas_{unique_id}.xlsx"
+            #unique_id = uuid.uuid4().hex[:10]
+            #nombre_salida = f"rutas_{unique_id}.xlsx"
+            from datetime import datetime
+
+            fecha_hoy = datetime.today().strftime("%d_%m_%Y")
+            nombre_salida = f"rutas_{fecha_hoy}.xlsx"
             salida_path = workdir / nombre_salida
 
             cmd = [
@@ -243,3 +247,4 @@ with tab2:
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                 key=f"download_{gestor}"
                             )
+
