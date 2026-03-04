@@ -167,40 +167,6 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
 
         style_sheet(ws)
 
-    # -----------------------------
-    # RESUMEN_UNICO (AL FINAL)
-    # -----------------------------
-
-    operativas = []
-
-    if "HOSPITALES" in wb_out.sheetnames:
-        operativas.append("HOSPITALES")
-
-    if "FEDERACION" in wb_out.sheetnames:
-        operativas.append("FEDERACION")
-
-    zrep_sheets = sorted([s for s in wb_out.sheetnames if s.startswith("ZREP_")])
-    operativas.extend(zrep_sheets)
-
-    ws_res = wb_out.create_sheet("RESUMEN_UNICO")
-    ws_res.append(["Clave", "Expediciones", "Bultos", "Kilos"])
-
-    for hoja in operativas:
-        ws_res.append([
-            hoja,
-            f"=COUNTA('{hoja}'!A:A)-1",
-            #f"=SUM('{hoja}'!H:H)",
-            #f"=SUM('{hoja}'!G:G)"
-            f"=SUM('{hoja}'!G2:G1048576)"
-            f"=SUM('{hoja}'!H2:H1048576)"            
-        ])
-
-    style_sheet(ws_res)
-    set_widths(ws_res, [20, 15, 15, 15])
-
-    # GUARDAR UNA SOLA VEZ
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    wb_out.save(out_path)
 
 
 def main():
