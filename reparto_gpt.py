@@ -178,12 +178,12 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     
         existing.add(nombre)
 
-    ws = wb_out.create_sheet(nombre)
-
-    for row in dataframe_to_rows(sub[COLUMNAS_BASE], index=False, header=True):
-        ws.append(row)
-
-    style_sheet(ws)
+        ws = wb_out.create_sheet(nombre)
+    
+        for row in dataframe_to_rows(sub[COLUMNAS_BASE], index=False, header=True):
+            ws.append(row)
+    
+        style_sheet(ws)
 
     # -----------------------------
     # RESUMEN_UNICO (AL FINAL)
