@@ -165,7 +165,12 @@ with tab2:
     if archivo_excel:
 
         input_path = workdir / "entrada_fase2.xlsx"
-        output_unique = f"salida_reordenada_{uuid.uuid4().hex[:8]}.xlsx"
+        #output_unique = f"salida_reordenada_{uuid.uuid4().hex[:8]}.xlsx"
+        from datetime import datetime
+
+        fecha = datetime.today().strftime("%d_%m_%Y")
+        hora = datetime.today().strftime("%H%M")
+        output_unique = f"salida_reordenada_{fecha}_{hora}.xlsx"
         output_path = workdir / output_unique
 
         input_path.write_bytes(archivo_excel.getbuffer())
@@ -247,4 +252,5 @@ with tab2:
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                 key=f"download_{gestor}"
                             )
+
 
