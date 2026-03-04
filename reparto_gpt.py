@@ -191,7 +191,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
             f"=COUNTA('{hoja}'!A:A)-1",
             #f"=SUM('{hoja}'!H:H)",
             #f"=SUM('{hoja}'!G:G)"
-            f"=SUM('{hoja}'!G2:G1048576)"
+            f"=SUM('{hoja}'!G2:G1048576)",
             f"=SUM('{hoja}'!H2:H1048576)"            
         ])
 
