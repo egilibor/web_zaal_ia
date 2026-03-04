@@ -4,14 +4,10 @@ import shutil
 import tempfile
 import subprocess
 from pathlib import Path
-from datetime import datetime
 
 import streamlit as st
 from reordenar_rutas import reordenar_excel
-import importlib
-import add_resumen_unico
-from modulo_valencia_gestores import generar_libros_gestores
-
+from add_resumen_unico import generar_resumen_unico
 
 # ==========================================================
 # CONFIG
@@ -20,34 +16,14 @@ from modulo_valencia_gestores import generar_libros_gestores
 st.set_page_config(page_title="Reparto determinista", layout="wide")
 st.title("Reparto determinista")
 
-
-# ----------------------------------------------------------
-# SELECCIÓN DE DELEGACIÓN
-# ----------------------------------------------------------
-
-delegacion = st.selectbox(
-    "Delegación",
-    ["Castellón", "Valencia"]
-)
-
 REPO_DIR = Path(__file__).resolve().parent
 SCRIPT_REPARTO = REPO_DIR / "reparto_gpt.py"
-
-if delegacion == "Castellón":
-    REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
-    COORDENADAS_REPO = REPO_DIR / "Libro_Servicio_Castellon.xlsx"
-    LAT0 = 39.804106
-    LON0 = -0.217351
-
-elif delegacion == "Valencia":
-    REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
-    COORDENADAS_REPO = REPO_DIR / "valencia_municipios_coordenadas.xlsx"
-    LAT0 = 39.44068
-    LON0 = -0.42592
+REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
+COORDENADAS_REPO = REPO_DIR / "Libro_de_Servicio_Castellon_con_coordenadas.xlsx"
 
 
 # ==========================================================
-# WORKDIR POR SESIÓN
+# WORKDIR
 # ==========================================================
 
 if "workdir" not in st.session_state:
@@ -59,7 +35,6 @@ workdir = st.session_state.workdir
 with st.sidebar:
     st.write(f"Run ID: {st.session_state.run_id}")
     st.write(f"Workdir: {workdir}")
-
     if st.button("Reset sesión"):
         shutil.rmtree(workdir, ignore_errors=True)
         st.session_state.workdir = Path(tempfile.mkdtemp(prefix="reparto_"))
@@ -68,7 +43,7 @@ with st.sidebar:
 
 
 # ==========================================================
-# MENÚ
+# MENÚ HORIZONTAL
 # ==========================================================
 
 tab1, tab2 = st.tabs([
@@ -96,30 +71,18 @@ with tab1:
         input_csv = workdir / "llegadas.csv"
         input_csv.write_bytes(csv_file.getbuffer())
 
-        # Copiar reglas
-        reglas_path = workdir / REGLAS_REPO.name
-        reglas_path.write_bytes(REGLAS_REPO.read_bytes())
+        (workdir / "Reglas_hospitales.xlsx").write_bytes(
+            REGLAS_REPO.read_bytes()
+        )
 
-        # Copiar coordenadas (CLAVE NUEVA)
-        coords_path = workdir / COORDENADAS_REPO.name
-        coords_path.write_bytes(COORDENADAS_REPO.read_bytes())
-
-        if st.button("Generar reparto", key="fase1_btn"):
-
-            fecha = datetime.today().strftime("%d_%m_%Y")
-            hora = datetime.today().strftime("%H%M")
-            nombre_salida = f"rutas_{fecha}_{hora}.xlsx"
-            salida_path = workdir / nombre_salida
+        if st.button("Generar salida.xlsx", key="fase1_btn"):
 
             cmd = [
                 sys.executable,
                 str(SCRIPT_REPARTO),
                 "--csv", "llegadas.csv",
-                "--reglas", REGLAS_REPO.name,
-                "--out", nombre_salida,
-                "--coords", COORDENADAS_REPO.name,
-                "--lat", str(LAT0),
-                "--lon", str(LON0),
+                "--reglas", "Reglas_hospitales.xlsx",
+                "--out", "salida.xlsx",
             ]
 
             with st.spinner("Ejecutando reparto_gpt.py…"):
@@ -134,28 +97,25 @@ with tab1:
                 st.error("Error en reparto_gpt.py")
                 st.code(p.stderr)
             else:
-                if salida_path.exists():
-
-                    importlib.reload(add_resumen_unico)
-                    add_resumen_unico.generar_resumen_unico(str(salida_path))
-
+                salida = workdir / "salida.xlsx"
+                if salida.exists():
+                    generar_resumen_unico(str(salida))
                     st.success("Archivo generado correctamente")
 
                     st.download_button(
-                        "Descargar archivo generado",
-                        data=salida_path.read_bytes(),
-                        file_name=nombre_salida,
+                        "Descargar salida.xlsx",
+                        data=salida.read_bytes(),
+                        file_name="salida.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     )
                 else:
-                    st.error("No se generó el archivo de salida")
-
+                    st.error("No se generó salida.xlsx")
     else:
         st.info("Sube un CSV para habilitar la ejecución.")
 
 
 # ==========================================================
-# FASE 2 (SIN CAMBIOS)
+# FASE 2
 # ==========================================================
 
 with tab2:
@@ -163,7 +123,7 @@ with tab2:
     st.subheader("Reordenar rutas existentes")
 
     archivo_excel = st.file_uploader(
-        "Subir archivo Excel",
+        "Subir salida.xlsx modificado",
         type=["xlsx"],
         key="fase2_excel"
     )
@@ -171,11 +131,7 @@ with tab2:
     if archivo_excel:
 
         input_path = workdir / "entrada_fase2.xlsx"
-
-        fecha = datetime.today().strftime("%d_%m_%Y")
-        hora = datetime.today().strftime("%H%M")
-        output_unique = f"salida_reordenada_{fecha}_{hora}.xlsx"
-        output_path = workdir / output_unique
+        output_path = workdir / "salida_reordenada.xlsx"
 
         input_path.write_bytes(archivo_excel.getbuffer())
 
@@ -186,24 +142,17 @@ with tab2:
                     input_path=input_path,
                     output_path=output_path,
                     ruta_coordenadas=COORDENADAS_REPO,
-                    lat_origen=LAT0,
-                    lon_origen=LON0,
                 )
 
-                importlib.reload(add_resumen_unico)
-                add_resumen_unico.generar_resumen_unico(str(output_path))
-
                 if output_path.exists():
-
                     st.success("Rutas reordenadas correctamente")
 
                     st.download_button(
-                        "Descargar archivo reordenado",
+                        "Descargar salida_reordenada.xlsx",
                         data=output_path.read_bytes(),
-                        file_name=output_unique,
+                        file_name="salida_reordenada.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     )
-
                 else:
                     st.error("No se generó el archivo reordenado.")
 
@@ -213,42 +162,4 @@ with tab2:
     else:
         st.info("Sube el archivo para activar la reordenación.")
 
-    if delegacion == "Valencia":
 
-        st.divider()
-        st.subheader("Distribución por gestores")
-
-        archivo_reordenado_final = st.file_uploader(
-            "Subir archivo reordenado definitivo",
-            type=["xlsx"],
-            key="valencia_excel_final"
-        )
-
-        if archivo_reordenado_final:
-
-            ruta_final = workdir / f"final_valencia_{uuid.uuid4().hex[:8]}.xlsx"
-            ruta_final.write_bytes(archivo_reordenado_final.getbuffer())
-
-            if st.button("Generar libros gestores", key="valencia_gestores_btn"):
-
-                resultado = generar_libros_gestores(
-                    ruta_excel_final=str(ruta_final),
-                    ruta_asignacion=str(REPO_DIR / "gestor_zonas.xlsx"),
-                    carpeta_salida=str(workdir)
-                )
-
-                if not resultado["ok"]:
-                    for error in resultado["errores"]:
-                        st.error(error)
-                else:
-                    st.success("Libros por gestor generados correctamente")
-
-                    for gestor, ruta in resultado["archivos_generados"].items():
-                        with open(ruta, "rb") as f:
-                            st.download_button(
-                                label=f"Descargar {gestor}",
-                                data=f,
-                                file_name=Path(ruta).name,
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                key=f"download_{gestor}"
-                            )
