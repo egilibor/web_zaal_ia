@@ -28,9 +28,9 @@ ORIGEN_LON = -0.217351
 COORD_FILE = Path(__file__).parent / "Libro_de_Servicio_Castellon_con_coordenadas.xlsx"
 
 
-# -------------------------------------------------
+# -------------------------
 # UTILIDADES
-# -------------------------------------------------
+# -------------------------
 
 def clean_text(x) -> str:
     if pd.isna(x):
@@ -67,35 +67,6 @@ def parse_int(x) -> int:
         return 0
 
 
-def norm(s: str) -> str:
-    s = clean_text(s).upper()
-    trans = str.maketrans({
-        "Á":"A","É":"E","Í":"I","Ó":"O","Ú":"U","Ü":"U","Ñ":"N","Ç":"C",
-        "À":"A","È":"E","Ì":"I","Ò":"O","Ù":"U","Ä":"A","Ë":"E","Ï":"I","Ö":"O",
-        "Â":"A","Ê":"E","Î":"I","Ô":"O","Û":"U"
-    })
-    s = s.translate(trans)
-    s = re.sub(r"[^\w\s]", " ", s)
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
-
-
-def unique_join(values: List[str], sep: str = " / ") -> str:
-    seen = set()
-    out = []
-    for v in values:
-        v = clean_text(v)
-        if not v or v in seen:
-            continue
-        seen.add(v)
-        out.append(v)
-    return sep.join(out)
-
-
-# -------------------------------------------------
-# EXCEL STYLE
-# -------------------------------------------------
-
 def style_sheet(ws):
     thin = Side(style="thin", color="D0D0D0")
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
@@ -128,18 +99,19 @@ def set_widths(ws, widths: List[int]):
             ws.column_dimensions[get_column_letter(i)].width = w
 
 
-# -------------------------------------------------
+# -------------------------
 # CORE
-# -------------------------------------------------
+# -------------------------
 
 def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
 
     df = pd.read_csv(csv_path, sep=";", encoding="utf-8-sig", dtype=str, engine="python")
+
     df["Kgs"] = df["Kgs"].apply(parse_kg)
     df["Bultos"] = df["Btos."].apply(parse_int)
-    df["Población"] = df["Población"].apply(clean_text)
-    df["Dirección"] = df["Dir_OK"].apply(clean_text)
-    df["Z.Rep"] = df["Z.Rep"].apply(clean_text)
+    df["Población"] = df["Población"].fillna("")
+    df["Dirección"] = df["Dir_OK"].fillna("")
+    df["Z.Rep"] = df["Z.Rep"].fillna("")
     df["Hospital"] = ""
     df["Cliente"] = df.get("Cliente", "")
 
@@ -166,6 +138,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
             _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         ],
     })
+
     ws_meta = wb_out.create_sheet("METADATOS")
     for row in dataframe_to_rows(meta, index=False, header=True):
         ws_meta.append(row)
@@ -185,18 +158,24 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
 
     # ZREP
     for z, sub in resto.groupby("Z.Rep"):
-        ws = wb_out.create_sheet(f"ZREP_{z}")
+        nombre = f"ZREP_{z}"
+        nombre = re.sub(r"[\\/*?:\[\]]", "_", nombre)
+        ws = wb_out.create_sheet(nombre)
+
         for row in dataframe_to_rows(sub[COLUMNAS_BASE], index=False, header=True):
             ws.append(row)
+
         style_sheet(ws)
 
-    # -------------------------------------------------
-    # CREAR RESUMEN_UNICO AL FINAL
-    # -------------------------------------------------
+    # -----------------------------
+    # RESUMEN_UNICO (AL FINAL)
+    # -----------------------------
 
     operativas = []
+
     if "HOSPITALES" in wb_out.sheetnames:
         operativas.append("HOSPITALES")
+
     if "FEDERACION" in wb_out.sheetnames:
         operativas.append("FEDERACION")
 
@@ -229,7 +208,7 @@ def main():
     except Exception:
         pass
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument("--csv")
     parser.add_argument("--reglas")
     parser.add_argument("--out")
@@ -240,6 +219,7 @@ def main():
     out_p = Path(args.out) if args.out else Path(DEFAULT_OUT)
 
     origen = "LLEGADAS"
+
     run(csv_p, reglas_p, out_p, origen)
     print(f"OK: generado {out_p}")
 
