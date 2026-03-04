@@ -4,6 +4,7 @@ import shutil
 import tempfile
 import subprocess
 from pathlib import Path
+from datetime import datetime
 
 import streamlit as st
 from reordenar_rutas import reordenar_excel
@@ -95,25 +96,30 @@ with tab1:
         input_csv = workdir / "llegadas.csv"
         input_csv.write_bytes(csv_file.getbuffer())
 
-        reglas_path = workdir / "Reglas_hospitales.xlsx"
+        # Copiar reglas
+        reglas_path = workdir / REGLAS_REPO.name
         reglas_path.write_bytes(REGLAS_REPO.read_bytes())
+
+        # Copiar coordenadas (CLAVE NUEVA)
+        coords_path = workdir / COORDENADAS_REPO.name
+        coords_path.write_bytes(COORDENADAS_REPO.read_bytes())
 
         if st.button("Generar reparto", key="fase1_btn"):
 
-            #unique_id = uuid.uuid4().hex[:10]
-            #nombre_salida = f"rutas_{unique_id}.xlsx"
-            from datetime import datetime
-
-            fecha_hoy = datetime.today().strftime("%d_%m_%Y")
-            nombre_salida = f"rutas_{fecha_hoy}.xlsx"
+            fecha = datetime.today().strftime("%d_%m_%Y")
+            hora = datetime.today().strftime("%H%M")
+            nombre_salida = f"rutas_{fecha}_{hora}.xlsx"
             salida_path = workdir / nombre_salida
 
             cmd = [
                 sys.executable,
                 str(SCRIPT_REPARTO),
                 "--csv", "llegadas.csv",
-                "--reglas", "Reglas_hospitales.xlsx",
+                "--reglas", REGLAS_REPO.name,
                 "--out", nombre_salida,
+                "--coords", COORDENADAS_REPO.name,
+                "--lat", str(LAT0),
+                "--lon", str(LON0),
             ]
 
             with st.spinner("Ejecutando reparto_gpt.py…"):
@@ -149,7 +155,7 @@ with tab1:
 
 
 # ==========================================================
-# FASE 2
+# FASE 2 (SIN CAMBIOS)
 # ==========================================================
 
 with tab2:
@@ -165,8 +171,6 @@ with tab2:
     if archivo_excel:
 
         input_path = workdir / "entrada_fase2.xlsx"
-        #output_unique = f"salida_reordenada_{uuid.uuid4().hex[:8]}.xlsx"
-        from datetime import datetime
 
         fecha = datetime.today().strftime("%d_%m_%Y")
         hora = datetime.today().strftime("%H%M")
@@ -209,10 +213,6 @@ with tab2:
     else:
         st.info("Sube el archivo para activar la reordenación.")
 
-    # ==========================================================
-    # VALENCIA · DISTRIBUCIÓN POR GESTORES (SIEMPRE VISIBLE EN TAB2)
-    # ==========================================================
-
     if delegacion == "Valencia":
 
         st.divider()
@@ -252,5 +252,3 @@ with tab2:
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                 key=f"download_{gestor}"
                             )
-
-
