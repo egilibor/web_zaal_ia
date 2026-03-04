@@ -31,13 +31,12 @@ def generar_resumen_unico(ruta_excel: str) -> None:
         cell.font = Font(bold=True)
 
     # Filas dinámicas
-    # Filas dinámicas (robusto ante cambios de orden de columnas)
     for hoja in operativas:
         ws.append([
             hoja,
-            f'=COUNTA(INDEX(\'{hoja}\'!A:Z,0,MATCH("Exp",\'{hoja}\'!1:1,0)))-1',
-            f'=SUM(INDEX(\'{hoja}\'!A:Z,0,MATCH("Bultos",\'{hoja}\'!1:1,0)))',
-            f'=SUM(INDEX(\'{hoja}\'!A:Z,0,MATCH("Kgs",\'{hoja}\'!1:1,0)))'
+            f"=COUNTA('{hoja}'!A:A)-1",
+            f"=SUM('{hoja}'!H:H)",
+            f"=SUM('{hoja}'!G:G)"
         ])
 
     # Ajuste simple de ancho
@@ -48,3 +47,4 @@ def generar_resumen_unico(ruta_excel: str) -> None:
 
 
     wb.save(ruta_excel)
+
