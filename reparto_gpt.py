@@ -294,7 +294,18 @@ def nearest_neighbor_route(pueblos, coords):
 # -------------------------
 
 def load_csv(csv_path: Path) -> pd.DataFrame:
-    df_raw = pd.read_csv(csv_path, sep=";", encoding="utf-8-sig", dtype=str, engine="python")
+    #df_raw = pd.read_csv(csv_path, sep=";", encoding="utf-8-sig", dtype=str, engine="python")
+    import csv
+    
+    df_raw = pd.read_csv(
+        csv_path,
+        sep=";",
+        encoding="utf-8-sig",
+        dtype=str,
+        engine="python",
+        quoting=csv.QUOTE_MINIMAL,
+        on_bad_lines="warn"
+    )
     cols = list(df_raw.columns)
 
     col_exp = pick_col(cols, ["Exp"])
