@@ -114,7 +114,14 @@ def style_sheet(ws):
 
 def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
 
-    df = pd.read_csv(csv_path, sep=";", encoding="utf-8-sig", dtype=str, engine="python")
+    df = pd.read_csv(
+        csv_path,
+        sep=";",
+        encoding="utf-8-sig",
+        dtype=str,
+        engine="python",
+        on_bad_lines="skip"
+    )
 
     df["Kgs"] = df["Kgs"].apply(parse_kg)
     df["Bultos"] = df["Btos."].apply(parse_int)
