@@ -182,13 +182,13 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     zrep_sheets = sorted([s for s in wb_out.sheetnames if s.startswith("ZREP_")])
     operativas.extend(zrep_sheets)
 
-    ws_res = wb_out.create_sheet("RESUMEN_UNICO")
+    ws_res = wb_out.create_sheet("RESUMEN_UNICO",0)
     ws_res.append(["Clave", "Expediciones", "Bultos", "Kilos"])
 
     for hoja in operativas:
         ws_res.append([
             hoja,
-            f"=COUNTA('{hoja}'!A:A)-1",
+            f"=ROWS('{hoja}'!A:A)-1",
             #f"=SUM('{hoja}'!H:H)",
             #f"=SUM('{hoja}'!G:G)"
             f"=SUM('{hoja}'!G2:G1048576)",
