@@ -20,7 +20,7 @@ COLUMNAS_OBLIGATORIAS = [
     "Kgs",
     "Bultos",
     "Z.Rep",
-    "N_servicio",
+    "N. servicio",
 ]
 
 
@@ -275,6 +275,7 @@ def reordenar_excel(input_path: Path, output_path: Path, ruta_coordenadas: Path)
         for nombre, df in hojas_resultado.items():
 
             df.to_excel(writer, sheet_name=nombre, index=False)
+
 
 
 
