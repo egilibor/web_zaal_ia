@@ -1,11 +1,10 @@
 from datetime import datetime
 from pathlib import Path
 import pandas as pd
-from openpyxl import load_workbook, Workbook
+from openpyxl import Workbook
 
 
 def _normalizar(texto: str) -> str:
-    """Normaliza texto para cruces seguros sin alterar el original."""
     return " ".join(str(texto).strip().split())
 
 
@@ -22,8 +21,9 @@ def generar_libros_gestores(
     }
 
     try:
+
         # -------------------------------------------------
-        # 1. Validaciones básicas
+        # Validaciones básicas
         # -------------------------------------------------
         if not Path(ruta_excel_final).exists():
             resultado["errores"].append("No existe el Excel final validado.")
@@ -38,11 +38,11 @@ def generar_libros_gestores(
         fecha_hoy = datetime.today().strftime("%Y-%m-%d")
 
         # -------------------------------------------------
-        # 2. Detectar hojas territoriales
+        # Detectar hojas territoriales
         # -------------------------------------------------
-        wb_origen = load_workbook(ruta_excel_final, data_only=False)
-        hojas_libro = wb_origen.sheetnames
+        xls = pd.ExcelFile(ruta_excel_final)
 
+        hojas_libro = xls.sheet_names
         zonas_libro_raw = [h for h in hojas_libro if h.startswith("ZREP_")]
 
         if not zonas_libro_raw:
@@ -51,12 +51,11 @@ def generar_libros_gestores(
             )
             return resultado
 
-        # mapa normalizado → nombre real hoja
         mapa_hojas = {_normalizar(z): z for z in zonas_libro_raw}
         zonas_libro_set = set(mapa_hojas.keys())
 
         # -------------------------------------------------
-        # 3. Leer asignación gestores
+        # Leer asignación
         # -------------------------------------------------
         df_asignacion = pd.read_excel(ruta_asignacion)
 
@@ -81,9 +80,10 @@ def generar_libros_gestores(
         gestores_detectados = sorted(df_asignacion["GESTOR"].unique())
 
         # -------------------------------------------------
-        # 4. Validación cruzada
+        # Validación importante
         # -------------------------------------------------
         zonas_sin_gestor = zonas_libro_set - zonas_asignadas
+
         if zonas_sin_gestor:
             resultado["errores"].append(
                 f"Zonas sin asignación en gestor_zonas.xlsx: {list(zonas_sin_gestor)}"
@@ -91,7 +91,7 @@ def generar_libros_gestores(
             return resultado
 
         # -------------------------------------------------
-        # 5. Generación de Excel por gestor
+        # Generar Excel por gestor
         # -------------------------------------------------
         for gestor in gestores_detectados:
 
@@ -110,35 +110,30 @@ def generar_libros_gestores(
             for zona_norm in zonas_gestor_norm:
 
                 zona_real = mapa_hojas[zona_norm]
-                ws_origen = wb_origen[zona_real]
-                ws_nueva = wb_nuevo.create_sheet(title=zona_real)
 
-                datos = [list(row) for row in ws_origen.iter_rows(values_only=True)]
-                if not datos:
-                    continue
+                df_zona = pd.read_excel(ruta_excel_final, sheet_name=zona_real)
 
-                encabezados = datos[0]
-                filas = datos[1:]
+                ws = wb_nuevo.create_sheet(title=zona_real)
 
-                ws_nueva.append(encabezados)
-                for fila in filas:
-                    ws_nueva.append(fila)
+                ws.append(list(df_zona.columns))
 
-                df_zona = pd.DataFrame(filas, columns=encabezados)
+                for fila in df_zona.itertuples(index=False):
+                    ws.append(list(fila))
+
                 df_zona["ZONA"] = zona_real
                 dfs_todo.append(df_zona)
 
             # -------------------------------------------------
-            # TODO (todas las expediciones del gestor)
+            # TODO
             # -------------------------------------------------
-            df_todo = pd.concat(dfs_todo, ignore_index=True) if dfs_todo else pd.DataFrame()
+            df_todo = pd.concat(dfs_todo, ignore_index=True)
 
             ws_todo = wb_nuevo.create_sheet(title="TODO")
 
-            if not df_todo.empty:
-                ws_todo.append(list(df_todo.columns))
-                for _, row in df_todo.iterrows():
-                    ws_todo.append(row.tolist())
+            ws_todo.append(list(df_todo.columns))
+
+            for fila in df_todo.itertuples(index=False):
+                ws_todo.append(list(fila))
 
             # -------------------------------------------------
             # RESUMEN_UNICO
@@ -158,26 +153,24 @@ def generar_libros_gestores(
 
             ws_resumen["A4"] = "Totales por zona"
 
-            if not df_todo.empty:
+            col_zona = df_todo.columns.get_loc("ZONA") + 1
+            col_zona_letter = ws_todo.cell(row=1, column=col_zona).column_letter
 
-                col_zona = df_todo.columns.get_loc("ZONA") + 1
-                col_zona_letter = ws_todo.cell(row=1, column=col_zona).column_letter
+            zonas_unicas = sorted(df_todo["ZONA"].unique())
 
-                zonas_unicas = sorted(df_todo["ZONA"].unique())
+            fila_inicio = 5
 
-                fila_inicio = 5
+            for i, zona in enumerate(zonas_unicas):
 
-                for i, zona in enumerate(zonas_unicas):
+                fila_actual = fila_inicio + i
 
-                    fila_actual = fila_inicio + i
-
-                    ws_resumen[f"A{fila_actual}"] = zona
-                    ws_resumen[f"B{fila_actual}"] = (
-                        f'=CONTAR.SI(TODO!{col_zona_letter}:{col_zona_letter};"{zona}")'
-                    )
+                ws_resumen[f"A{fila_actual}"] = zona
+                ws_resumen[f"B{fila_actual}"] = (
+                    f'=CONTAR.SI(TODO!{col_zona_letter}:{col_zona_letter};"{zona}")'
+                )
 
             # -------------------------------------------------
-            # Guardar Excel gestor
+            # Guardar archivo
             # -------------------------------------------------
             nombre_archivo = f"VALENCIA_{fecha_hoy}_{gestor}.xlsx"
 
