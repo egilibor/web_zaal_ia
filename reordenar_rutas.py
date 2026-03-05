@@ -78,6 +78,7 @@ def mejorar_ruta_2opt(coords):
     mejora = True
 
     while mejora:
+
         mejora = False
 
         for i in range(1, len(mejor) - 2):
@@ -95,6 +96,7 @@ def mejorar_ruta_2opt(coords):
                 nuevo = distancia(a, c) + distancia(b, d)
 
                 if nuevo < actual:
+
                     mejor[i:j] = reversed(mejor[i:j])
                     mejora = True
 
@@ -105,14 +107,7 @@ def mejorar_ruta_2opt(coords):
 # GOOGLE MAPS LINK
 # -------------------------------------------------
 
-def generar_link_pueblos(df_ruta, delegacion):
-
-    if delegacion == "VALENCIA":
-        lat_origen = LAT_VALENCIA
-        lon_origen = LON_VALENCIA
-    else:
-        lat_origen = LAT_CASTELLON
-        lon_origen = LON_CASTELLON
+def generar_link_pueblos(df_ruta, lat_origen, lon_origen):
 
     puntos = [f"{lat_origen},{lon_origen}"]
 
@@ -128,6 +123,7 @@ def generar_link_pueblos(df_ruta, delegacion):
             clave = (round(float(lat), 5), round(float(lon), 5))
 
             if clave not in coords_vistas:
+
                 coords_vistas.add(clave)
                 puntos.append(f"{clave[0]},{clave[1]}")
 
@@ -259,8 +255,8 @@ def reordenar_excel(
     input_path: Path,
     output_path: Path,
     ruta_coordenadas: Path,
-    lat_origen: float = LAT_CASTELLON,
-    lon_origen: float = LON_CASTELLON,
+    lat_origen: float,
+    lon_origen: float,
 ):
 
     hojas = pd.read_excel(input_path, sheet_name=None)
@@ -280,10 +276,8 @@ def reordenar_excel(
                 lon_origen,
             )
 
-            link = generar_link_pueblos(
-                df_ordenado,
-                "VALENCIA" if lat_origen == LAT_VALENCIA else "CASTELLON"
-            )
+            link = generar_link_pueblos(df_ordenado, lat_origen, lon_origen)
+
             df_ordenado.insert(0, "NAVEGACIÓN", "")
 
             if link:
@@ -298,6 +292,5 @@ def reordenar_excel(
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
 
         for nombre, df in hojas_resultado.items():
+
             df.to_excel(writer, sheet_name=nombre, index=False)
-
-
