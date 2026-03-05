@@ -19,23 +19,34 @@ st.title("Reparto determinista")
 REPO_DIR = Path(__file__).resolve().parent
 SCRIPT_REPARTO = REPO_DIR / "reparto_gpt.py"
 REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
-COORDENADAS_REPO = REPO_DIR / "Libro_de_Servicio_Castellon_con_coordenadas.xlsx"
 
 # ==========================================================
 # DELEGACIÓN
 # ==========================================================
 
-DELEGACION = st.sidebar.selectbox(
+delegacion = st.sidebar.selectbox(
     "Delegación",
     ["Castellon", "Valencia"]
 ).lower()
 
+# reinicio limpio si cambia delegación
+if "delegacion_activa" not in st.session_state:
+    st.session_state.delegacion_activa = delegacion
+
+if st.session_state.delegacion_activa != delegacion:
+    st.session_state.delegacion_activa = delegacion
+    st.session_state.pop("workdir", None)
+    st.rerun()
+
+# archivos de coordenadas por delegación
 COORDENADAS_FILES = {
     "castellon": "Libro_de_Servicio_Castellon_con_coordenadas.xlsx",
     "valencia": "valencia.municipios.coordenadas.xlsx",
 }
 
-COORDENADAS_REPO = REPO_DIR / COORDENADAS_FILES[DELEGACION]
+COORDENADAS_REPO = REPO_DIR / COORDENADAS_FILES[delegacion]
+
+st.sidebar.write(f"Delegación activa: {delegacion}")
 
 # ==========================================================
 # WORKDIR
@@ -177,6 +188,7 @@ with tab2:
 
     else:
         st.info("Sube el archivo para activar la reordenación.")
+
 
 
 
