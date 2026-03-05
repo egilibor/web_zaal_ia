@@ -138,32 +138,37 @@ def generar_libros_gestores(
             # -------------------------------------------------
             # RESUMEN_UNICO
             # -------------------------------------------------
+            
             ws_resumen = wb.create_sheet("RESUMEN_UNICO")
-
+            
+            # mover hoja al inicio del libro
+            wb._sheets.remove(ws_resumen)
+            wb._sheets.insert(0, ws_resumen)
+            
             ws_resumen["A1"] = "Total expediciones"
             ws_resumen["B1"] = "=COUNTA(TODO!A:A)-1"
-
+            
             if "Kgs" in df_todo.columns:
-
+            
                 col_kgs = df_todo.columns.get_loc("Kgs") + 1
                 col_letter = ws_todo.cell(row=1, column=col_kgs).column_letter
-
+            
                 ws_resumen["A2"] = "Total Kgs"
                 ws_resumen["B2"] = f"=SUM(TODO!{col_letter}:{col_letter})"
-
+            
             ws_resumen["A4"] = "Totales por zona"
-
+            
             col_zona = df_todo.columns.get_loc("ZONA") + 1
             col_zona_letter = ws_todo.cell(row=1, column=col_zona).column_letter
-
+            
             zonas_unicas = sorted(df_todo["ZONA"].unique())
-
+            
             fila_inicio = 5
-
+            
             for i, zona in enumerate(zonas_unicas):
-
+            
                 fila = fila_inicio + i
-
+            
                 ws_resumen[f"A{fila}"] = zona
                 ws_resumen[f"B{fila}"] = (
                     f'=COUNTIF(TODO!{col_zona_letter}:{col_zona_letter},"{zona}")'
