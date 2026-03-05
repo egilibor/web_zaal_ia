@@ -1,5 +1,3 @@
-# modulo_valencia_gestores.py
-
 from datetime import datetime
 from pathlib import Path
 import pandas as pd
@@ -53,12 +51,12 @@ def generar_libros_gestores(
             )
             return resultado
 
-        # Mapa normalizado → nombre real hoja
+        # mapa normalizado → nombre real hoja
         mapa_hojas = {_normalizar(z): z for z in zonas_libro_raw}
         zonas_libro_set = set(mapa_hojas.keys())
 
         # -------------------------------------------------
-        # 3. Leer asignación
+        # 3. Leer asignación gestores
         # -------------------------------------------------
         df_asignacion = pd.read_excel(ruta_asignacion)
 
@@ -92,15 +90,8 @@ def generar_libros_gestores(
             )
             return resultado
 
-        zonas_inexistentes = zonas_asignadas - zonas_libro_set
-        if zonas_inexistentes:
-            resultado["errores"].append(
-                f"Zonas asignadas que no existen en libro final: {list(zonas_inexistentes)}"
-            )
-            return resultado
-
         # -------------------------------------------------
-        # 5. Generación por gestor
+        # 5. Generación de Excel por gestor
         # -------------------------------------------------
         for gestor in gestores_detectados:
 
@@ -138,9 +129,10 @@ def generar_libros_gestores(
                 dfs_todo.append(df_zona)
 
             # -------------------------------------------------
-            # TODO
+            # TODO (todas las expediciones del gestor)
             # -------------------------------------------------
             df_todo = pd.concat(dfs_todo, ignore_index=True) if dfs_todo else pd.DataFrame()
+
             ws_todo = wb_nuevo.create_sheet(title="TODO")
 
             if not df_todo.empty:
@@ -149,43 +141,48 @@ def generar_libros_gestores(
                     ws_todo.append(row.tolist())
 
             # -------------------------------------------------
-            # RESUMEN_UNICO (Excel español)
+            # RESUMEN_UNICO
             # -------------------------------------------------
             ws_resumen = wb_nuevo.create_sheet(title="RESUMEN_UNICO")
 
             ws_resumen["A1"] = "Total expediciones"
             ws_resumen["B1"] = "=CONTARA(TODO!A:A)-1"
 
-            # Total Kgs
             if "Kgs" in df_todo.columns:
+
                 col_kgs = df_todo.columns.get_loc("Kgs") + 1
                 col_letter = ws_todo.cell(row=1, column=col_kgs).column_letter
 
                 ws_resumen["A2"] = "Total Kgs"
                 ws_resumen["B2"] = f"=SUMA(TODO!{col_letter}:{col_letter})"
 
-            # Totales por zona
             ws_resumen["A4"] = "Totales por zona"
 
             if not df_todo.empty:
+
                 col_zona = df_todo.columns.get_loc("ZONA") + 1
                 col_zona_letter = ws_todo.cell(row=1, column=col_zona).column_letter
 
                 zonas_unicas = sorted(df_todo["ZONA"].unique())
+
                 fila_inicio = 5
 
                 for i, zona in enumerate(zonas_unicas):
+
                     fila_actual = fila_inicio + i
+
                     ws_resumen[f"A{fila_actual}"] = zona
                     ws_resumen[f"B{fila_actual}"] = (
                         f'=CONTAR.SI(TODO!{col_zona_letter}:{col_zona_letter};"{zona}")'
                     )
 
             # -------------------------------------------------
-            # Guardar archivo
+            # Guardar Excel gestor
             # -------------------------------------------------
             nombre_archivo = f"VALENCIA_{fecha_hoy}_{gestor}.xlsx"
+
             ruta_salida = Path(carpeta_salida) / nombre_archivo
+
             wb_nuevo.save(ruta_salida)
 
             resultado["archivos_generados"][gestor] = str(ruta_salida)
