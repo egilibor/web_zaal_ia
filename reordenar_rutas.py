@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import math
 from pathlib import Path
 import pandas as pd
 
+
 # -------------------------------------------------
-# ORÍGENES POR DEFECTO
+# ORÍGENES
 # -------------------------------------------------
 
 LAT_CASTELLON = 39.804106
@@ -61,12 +61,16 @@ def normalizar_texto(txt):
 
 
 # -------------------------------------------------
-# MEJORAR RUTA (2-opt)
+# DISTANCIA
 # -------------------------------------------------
 
 def distancia(a, b):
-    return (a[0]-b[0])**2 + (a[1]-b[1])**2
+    return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2
 
+
+# -------------------------------------------------
+# 2-OPT
+# -------------------------------------------------
 
 def mejorar_ruta_2opt(coords):
 
@@ -76,19 +80,19 @@ def mejorar_ruta_2opt(coords):
     while mejora:
         mejora = False
 
-        for i in range(1, len(mejor)-2):
-            for j in range(i+1, len(mejor)):
+        for i in range(1, len(mejor) - 2):
+            for j in range(i + 1, len(mejor)):
 
-                if j-i == 1:
+                if j - i == 1:
                     continue
 
-                a = mejor[i-1]
+                a = mejor[i - 1]
                 b = mejor[i]
-                c = mejor[j-1]
+                c = mejor[j - 1]
                 d = mejor[j % len(mejor)]
 
-                actual = distancia(a,b) + distancia(c,d)
-                nuevo = distancia(a,c) + distancia(b,d)
+                actual = distancia(a, b) + distancia(c, d)
+                nuevo = distancia(a, c) + distancia(b, d)
 
                 if nuevo < actual:
                     mejor[i:j] = reversed(mejor[i:j])
@@ -114,7 +118,7 @@ def generar_link_pueblos(df_ruta, lat_origen, lon_origen):
 
         if pd.notna(lat) and pd.notna(lon):
 
-            clave = (round(float(lat),5), round(float(lon),5))
+            clave = (round(float(lat), 5), round(float(lon), 5))
 
             if clave not in coords_vistas:
 
@@ -125,9 +129,7 @@ def generar_link_pueblos(df_ruta, lat_origen, lon_origen):
     if len(puntos) < 2:
         return ""
 
-    url = "https://www.google.com/maps/dir/" + "/".join(puntos)
-
-    return url
+    return "https://www.google.com/maps/dir/" + "/".join(puntos)
 
 
 # -------------------------------------------------
@@ -140,9 +142,7 @@ def cargar_coordenadas(ruta):
 
     df.columns = df.columns.str.strip().str.upper()
 
-    columnas_necesarias = {"PUEBLO", "LATITUD", "LONGITUD"}
-
-    if not columnas_necesarias.issubset(df.columns):
+    if not {"PUEBLO", "LATITUD", "LONGITUD"}.issubset(df.columns):
 
         raise ValueError(
             f"Columnas detectadas: {list(df.columns)}. "
@@ -209,10 +209,9 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen):
 
         distancias = []
 
-        for item in restantes:
+        for idx, lat, lon in restantes:
 
-            idx, lat, lon = item
-            d = (lat - lat_actual)**2 + (lon - lon_actual)**2
+            d = (lat - lat_actual) ** 2 + (lon - lon_actual) ** 2
             distancias.append((d, idx, lat, lon))
 
         distancias.sort(key=lambda x: (x[0], x[1]))
@@ -226,8 +225,8 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen):
 
         restantes = [r for r in restantes if r[0] != idx_sel]
 
-    # mejora con 2-opt
-    coords_ruta = [(df.loc[i,"Latitud"], df.loc[i,"Longitud"]) for i in visitados]
+    # mejorar con 2-opt
+    coords_ruta = [(df.loc[i, "Latitud"], df.loc[i, "Longitud"]) for i in visitados]
 
     coords_mejoradas = mejorar_ruta_2opt(coords_ruta)
 
@@ -236,7 +235,7 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen):
 
     for c in coords_mejoradas:
         for i in visitados:
-            if i not in usados and (df.loc[i,"Latitud"], df.loc[i,"Longitud"]) == c:
+            if i not in usados and (df.loc[i, "Latitud"], df.loc[i, "Longitud"]) == c:
                 visitados_nuevo.append(i)
                 usados.add(i)
                 break
@@ -245,9 +244,7 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen):
 
     orden_final = visitados + filas_sin_coord
 
-    df_ordenado = df.loc[orden_final]
-
-    return df_ordenado
+    return df.loc[orden_final]
 
 
 # -------------------------------------------------
@@ -258,6 +255,8 @@ def reordenar_excel(
     input_path: Path,
     output_path: Path,
     ruta_coordenadas: Path,
+    lat_origen: float,
+    lon_origen: float,
 ):
 
     hojas = pd.read_excel(input_path, sheet_name=None)
@@ -269,14 +268,6 @@ def reordenar_excel(
     for nombre, df in hojas.items():
 
         if nombre.startswith("ZREP_"):
-
-            # origen según delegación
-            if "VALENCIA" in nombre.upper():
-                lat_origen = LAT_VALENCIA
-                lon_origen = LON_VALENCIA
-            else:
-                lat_origen = LAT_CASTELLON
-                lon_origen = LON_CASTELLON
 
             df_ordenado = ordenar_dataframe_zrep(
                 df,
