@@ -21,6 +21,21 @@ SCRIPT_REPARTO = REPO_DIR / "reparto_gpt.py"
 REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
 COORDENADAS_REPO = REPO_DIR / "Libro_de_Servicio_Castellon_con_coordenadas.xlsx"
 
+# ==========================================================
+# DELEGACIÓN
+# ==========================================================
+
+DELEGACION = st.sidebar.selectbox(
+    "Delegación",
+    ["Castellon", "Valencia"]
+).lower()
+
+COORDENADAS_FILES = {
+    "castellon": "Libro_de_Servicio_Castellon_con_coordenadas.xlsx",
+    "valencia": "valencia.municipios.coordenadas.xlsx",
+}
+
+COORDENADAS_REPO = REPO_DIR / COORDENADAS_FILES[DELEGACION]
 
 # ==========================================================
 # WORKDIR
@@ -162,6 +177,7 @@ with tab2:
 
     else:
         st.info("Sube el archivo para activar la reordenación.")
+
 
 
 
