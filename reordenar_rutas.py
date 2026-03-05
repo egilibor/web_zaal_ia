@@ -86,7 +86,7 @@ def generar_link_pueblos(df_ruta, lat_origen, lon_origen):
     url = "https://www.google.com/maps/dir/" + "/".join(puntos)
 
     # Excel lo reconocerá siempre como enlace
-    return f'=HYPERLINK("{url}","Abrir ruta en Google Maps")'
+    return url
 
 
 # -------------------------------------------------
@@ -346,3 +346,4 @@ def reordenar_excel(
         for nombre, df in hojas_resultado.items():
 
             df.to_excel(writer, sheet_name=nombre, index=False)
+
