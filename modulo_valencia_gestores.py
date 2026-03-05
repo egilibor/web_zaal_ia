@@ -141,7 +141,7 @@ def generar_libros_gestores(
             
             ws_resumen = wb.create_sheet("RESUMEN_UNICO")
             
-            # mover hoja al inicio del libro
+            # mover al inicio
             wb._sheets.remove(ws_resumen)
             wb._sheets.insert(0, ws_resumen)
             
@@ -151,12 +151,15 @@ def generar_libros_gestores(
             if "Kgs" in df_todo.columns:
             
                 col_kgs = df_todo.columns.get_loc("Kgs") + 1
-                col_letter = ws_todo.cell(row=1, column=col_kgs).column_letter
+                col_kgs_letter = ws_todo.cell(row=1, column=col_kgs).column_letter
             
                 ws_resumen["A2"] = "Total Kgs"
-                ws_resumen["B2"] = f"=SUM(TODO!{col_letter}:{col_letter})"
+                ws_resumen["B2"] = f"=SUM(TODO!{col_kgs_letter}:{col_kgs_letter})"
             
-            ws_resumen["A4"] = "Totales por zona"
+            # encabezado tabla
+            ws_resumen["A4"] = "Zona"
+            ws_resumen["B4"] = "Expediciones"
+            ws_resumen["C4"] = "Kgs"
             
             col_zona = df_todo.columns.get_loc("ZONA") + 1
             col_zona_letter = ws_todo.cell(row=1, column=col_zona).column_letter
@@ -170,9 +173,17 @@ def generar_libros_gestores(
                 fila = fila_inicio + i
             
                 ws_resumen[f"A{fila}"] = zona
+            
                 ws_resumen[f"B{fila}"] = (
                     f'=COUNTIF(TODO!{col_zona_letter}:{col_zona_letter},"{zona}")'
                 )
+            
+                if "Kgs" in df_todo.columns:
+            
+                    ws_resumen[f"C{fila}"] = (
+                        f'=SUMIF(TODO!{col_zona_letter}:{col_zona_letter},"{zona}",'
+                        f'TODO!{col_kgs_letter}:{col_kgs_letter})'
+                    )
 
             # -------------------------------------------------
             # Guardar archivo
