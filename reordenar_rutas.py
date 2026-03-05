@@ -118,6 +118,8 @@ def ordenar_dataframe_zrep(df: pd.DataFrame, coords: dict, lat_origen, lon_orige
         if pueblo_norm in coords:
 
             lat, lon = coords[pueblo_norm]
+            df.at[idx, "Latitud"] = lat
+            df.at[idx, "Longitud"] = lon
             filas_con_coord.append((idx, lat, lon))
 
         else:
@@ -305,3 +307,4 @@ def reordenar_excel(
         for nombre, df in hojas_resultado.items():
 
             df.to_excel(writer, sheet_name=nombre, index=False)
+
