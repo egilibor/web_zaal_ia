@@ -69,7 +69,7 @@ def generar_link_pueblos(df_ruta, lat_origen, lon_origen):
 
     puntos = [f"{lat_origen},{lon_origen}"]
 
-    direcciones_vistas = set()
+    contador = 0
 
     for _, row in df_ruta.iterrows():
 
@@ -78,15 +78,14 @@ def generar_link_pueblos(df_ruta, lat_origen, lon_origen):
 
         if direccion and pueblo:
 
-            clave = (direccion.upper(), pueblo.upper())
+            punto = quote(f"{direccion}, {pueblo}")
 
-            if clave not in direcciones_vistas:
+            puntos.append(punto)
 
-                direcciones_vistas.add(clave)
+            contador += 1
 
-                punto = quote(f"{direccion}, {pueblo}")
-
-                puntos.append(punto)
+            if contador == 9:
+                break
 
     if len(puntos) < 2:
         return ""
@@ -353,6 +352,7 @@ def reordenar_excel(
         for nombre, df in hojas_resultado.items():
 
             df.to_excel(writer, sheet_name=nombre, index=False)
+
 
 
 
