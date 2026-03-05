@@ -254,14 +254,9 @@ def reordenar_excel(
     input_path: Path,
     output_path: Path,
     ruta_coordenadas: Path,
-    lat_origen: float = None,
-    lon_origen: float = None,
+    lat_origen: float = LAT_CASTELLON,
+    lon_origen: float = LON_CASTELLON,
 ):
-
-    # si no se pasan coordenadas → usar Castellón
-    if lat_origen is None or lon_origen is None:
-        lat_origen = LAT_CASTELLON
-        lon_origen = LON_CASTELLON
 
     hojas = pd.read_excel(input_path, sheet_name=None)
 
@@ -296,5 +291,4 @@ def reordenar_excel(
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
 
         for nombre, df in hojas_resultado.items():
-
             df.to_excel(writer, sheet_name=nombre, index=False)
