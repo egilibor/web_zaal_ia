@@ -105,7 +105,14 @@ def mejorar_ruta_2opt(coords):
 # GOOGLE MAPS LINK
 # -------------------------------------------------
 
-def generar_link_pueblos(df_ruta, lat_origen, lon_origen):
+def generar_link_pueblos(df_ruta, delegacion):
+
+    if delegacion == "VALENCIA":
+        lat_origen = LAT_VALENCIA
+        lon_origen = LON_VALENCIA
+    else:
+        lat_origen = LAT_CASTELLON
+        lon_origen = LON_CASTELLON
 
     puntos = [f"{lat_origen},{lon_origen}"]
 
@@ -121,9 +128,7 @@ def generar_link_pueblos(df_ruta, lat_origen, lon_origen):
             clave = (round(float(lat), 5), round(float(lon), 5))
 
             if clave not in coords_vistas:
-
                 coords_vistas.add(clave)
-
                 puntos.append(f"{clave[0]},{clave[1]}")
 
     if len(puntos) < 2:
@@ -292,3 +297,4 @@ def reordenar_excel(
 
         for nombre, df in hojas_resultado.items():
             df.to_excel(writer, sheet_name=nombre, index=False)
+
