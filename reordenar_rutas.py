@@ -225,7 +225,6 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen):
 
         restantes = [r for r in restantes if r[0] != idx_sel]
 
-    # mejorar con 2-opt
     coords_ruta = [(df.loc[i, "Latitud"], df.loc[i, "Longitud"]) for i in visitados]
 
     coords_mejoradas = mejorar_ruta_2opt(coords_ruta)
@@ -255,9 +254,14 @@ def reordenar_excel(
     input_path: Path,
     output_path: Path,
     ruta_coordenadas: Path,
-    lat_origen: float,
-    lon_origen: float,
+    lat_origen: float = None,
+    lon_origen: float = None,
 ):
+
+    # si no se pasan coordenadas → usar Castellón
+    if lat_origen is None or lon_origen is None:
+        lat_origen = LAT_CASTELLON
+        lon_origen = LON_CASTELLON
 
     hojas = pd.read_excel(input_path, sheet_name=None)
 
