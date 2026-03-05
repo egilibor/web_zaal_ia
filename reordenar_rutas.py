@@ -67,9 +67,7 @@ def normalizar_texto(txt):
 
 def generar_link_pueblos(df_ruta, lat_origen, lon_origen):
 
-    puntos = [f"{lat_origen},{lon_origen}"]
-
-    coords_vistas = set()
+    coords = []
 
     for _, row in df_ruta.iterrows():
 
@@ -78,13 +76,15 @@ def generar_link_pueblos(df_ruta, lat_origen, lon_origen):
 
         if pd.notna(lat) and pd.notna(lon):
 
-            clave = (round(lat,6), round(lon,6))
+            coords.append((round(lat,5), round(lon,5)))
 
-            if clave not in coords_vistas:
+    # eliminar duplicados manteniendo orden
+    coords_unicas = list(dict.fromkeys(coords))
 
-                coords_vistas.add(clave)
+    puntos = [f"{lat_origen},{lon_origen}"]
 
-                puntos.append(f"{lat},{lon}")
+    for lat, lon in coords_unicas:
+        puntos.append(f"{lat},{lon}")
 
     if len(puntos) < 2:
         return ""
@@ -351,5 +351,6 @@ def reordenar_excel(
         for nombre, df in hojas_resultado.items():
 
             df.to_excel(writer, sheet_name=nombre, index=False)
+
 
 
