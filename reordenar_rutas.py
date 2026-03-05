@@ -4,7 +4,7 @@
 import math
 from pathlib import Path
 import pandas as pd
-
+from urllib.parse import quote
 
 # -------------------------------------------------
 # ORÍGENES POR DEFECTO
@@ -67,24 +67,26 @@ def normalizar_texto(txt):
 
 def generar_link_pueblos(df_ruta, lat_origen, lon_origen):
 
-    coords = []
+    puntos = [f"{lat_origen},{lon_origen}"]
+
+    direcciones_vistas = set()
 
     for _, row in df_ruta.iterrows():
 
-        lat = row.get("Latitud")
-        lon = row.get("Longitud")
+        direccion = str(row.get("Dirección", "")).strip()
+        pueblo = str(row.get("Población", "")).strip()
 
-        if pd.notna(lat) and pd.notna(lon):
+        if direccion and pueblo:
 
-            coords.append((round(lat,5), round(lon,5)))
+            clave = (direccion.upper(), pueblo.upper())
 
-    # eliminar duplicados manteniendo orden
-    coords_unicas = list(dict.fromkeys(coords))
+            if clave not in direcciones_vistas:
 
-    puntos = [f"{lat_origen},{lon_origen}"]
+                direcciones_vistas.add(clave)
 
-    for lat, lon in coords_unicas:
-        puntos.append(f"{lat},{lon}")
+                punto = quote(f"{direccion}, {pueblo}")
+
+                puntos.append(punto)
 
     if len(puntos) < 2:
         return ""
@@ -351,6 +353,7 @@ def reordenar_excel(
         for nombre, df in hojas_resultado.items():
 
             df.to_excel(writer, sheet_name=nombre, index=False)
+
 
 
 
