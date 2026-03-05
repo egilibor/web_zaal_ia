@@ -69,23 +69,22 @@ def generar_link_pueblos(df_ruta, lat_origen, lon_origen):
 
     puntos = [f"{lat_origen},{lon_origen}"]
 
-    contador = 0
+    coords_vistas = set()
 
     for _, row in df_ruta.iterrows():
 
-        direccion = str(row.get("Dirección", "")).strip()
-        pueblo = str(row.get("Población", "")).strip()
+        lat = row.get("Latitud")
+        lon = row.get("Longitud")
 
-        if direccion and pueblo:
+        if pd.notna(lat) and pd.notna(lon):
 
-            punto = quote(f"{direccion}, {pueblo}")
+            clave = (round(float(lat), 5), round(float(lon), 5))
 
-            puntos.append(punto)
+            if clave not in coords_vistas:
 
-            contador += 1
+                coords_vistas.add(clave)
 
-            if contador == 9:
-                break
+                puntos.append(f"{clave[0]},{clave[1]}")
 
     if len(puntos) < 2:
         return ""
@@ -93,7 +92,6 @@ def generar_link_pueblos(df_ruta, lat_origen, lon_origen):
     url = "https://www.google.com/maps/dir/" + "/".join(puntos)
 
     return url
-
 
 # -------------------------------------------------
 # CARGAR COORDENADAS
@@ -352,6 +350,7 @@ def reordenar_excel(
         for nombre, df in hojas_resultado.items():
 
             df.to_excel(writer, sheet_name=nombre, index=False)
+
 
 
 
