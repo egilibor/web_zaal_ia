@@ -280,8 +280,10 @@ def reordenar_excel(
                 lon_origen,
             )
 
-            link = generar_link_pueblos(df_ordenado, lat_origen, lon_origen)
-
+            link = generar_link_pueblos(
+                df_ordenado,
+                "VALENCIA" if lat_origen == LAT_VALENCIA else "CASTELLON"
+            )
             df_ordenado.insert(0, "NAVEGACIÓN", "")
 
             if link:
@@ -297,4 +299,5 @@ def reordenar_excel(
 
         for nombre, df in hojas_resultado.items():
             df.to_excel(writer, sheet_name=nombre, index=False)
+
 
