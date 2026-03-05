@@ -165,14 +165,17 @@ with tab2:
         if st.button("Reordenar rutas", key="fase2_btn"):
 
             try:
+
                 reordenar_excel(
                     input_path=input_path,
                     output_path=output_path,
                     ruta_coordenadas=COORDENADAS_REPO,
                 )
+
                 generar_resumen_unico(str(output_path))
-                
+
                 if output_path.exists():
+
                     st.success("Rutas reordenadas correctamente")
 
                     st.download_button(
@@ -181,15 +184,63 @@ with tab2:
                         file_name="salida_reordenada.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     )
+
                 else:
                     st.error("No se generó el archivo reordenado.")
 
             except Exception as e:
                 st.error(f"Error en reordenación: {e}")
 
-    else:
-        st.info("Sube el archivo para activar la reordenación.")
+        # -------------------------------------------------
+        # DIVIDIR POR GESTORES (SOLO VALENCIA)
+        # -------------------------------------------------
 
+        if delegacion == "valencia" and output_path.exists():
+
+            st.markdown("---")
+            st.subheader("Dividir rutas para gestores de tráfico")
+
+            if st.button("Generar Excel por gestor", key="fase3_btn"):
+
+                try:
+
+                    ruta_asignacion = REPO_DIR / "gestor_zonas.xlsx"
+
+                    resultado = generar_libros_gestores(
+                        ruta_excel_final=str(output_path),
+                        ruta_asignacion=str(ruta_asignacion),
+                        carpeta_salida=str(workdir)
+                    )
+
+                    if not resultado["ok"]:
+
+                        st.error("Error generando libros de gestores")
+
+                        for e in resultado["errores"]:
+                            st.write(e)
+
+                    else:
+
+                        st.success("Archivos generados correctamente")
+
+                        for gestor, ruta_archivo in resultado["archivos_generados"].items():
+
+                            ruta = Path(ruta_archivo)
+
+                            st.download_button(
+                                label=f"Descargar Excel {gestor}",
+                                data=ruta.read_bytes(),
+                                file_name=ruta.name,
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            )
+
+                except Exception as e:
+
+                    st.error(f"Error en generación de gestores: {e}")
+
+    else:
+
+        st.info("Sube el archivo para activar la reordenación.")
 
 
 
