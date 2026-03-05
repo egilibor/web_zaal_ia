@@ -60,7 +60,41 @@ def normalizar_texto(txt):
 
     return txt
 
+#--------------------------------------------------
+# MEJORAR RUTA
+#--------------------------------------------------
 
+def distancia(a, b):
+    return (a[0]-b[0])**2 + (a[1]-b[1])**2
+
+
+def mejorar_ruta_2opt(coords):
+
+    mejor = coords.copy()
+    mejora = True
+
+    while mejora:
+        mejora = False
+
+        for i in range(1, len(mejor)-2):
+            for j in range(i+1, len(mejor)):
+
+                if j-i == 1:
+                    continue
+
+                a = mejor[i-1]
+                b = mejor[i]
+                c = mejor[j-1]
+                d = mejor[j % len(mejor)]
+
+                actual = distancia(a,b) + distancia(c,d)
+                nuevo = distancia(a,c) + distancia(b,d)
+
+                if nuevo < actual:
+                    mejor[i:j] = reversed(mejor[i:j])
+                    mejora = True
+
+    return mejor
 # -------------------------------------------------
 # GOOGLE MAPS LINK
 # -------------------------------------------------
@@ -189,6 +223,22 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen):
 
         restantes = [r for r in restantes if r[0] != idx_sel]
 
+    coords = [(df.loc[i, "Latitud"], df.loc[i, "Longitud"]) for i in visitados]
+
+    coords_mejoradas = mejorar_ruta_2opt(coords)
+
+    visitados_nuevo = []
+    usados = set()
+    
+    for c in coords_mejoradas:
+        for i in visitados:
+            if i not in usados and (df.loc[i, "Latitud"], df.loc[i, "Longitud"]) == c:
+                visitados_nuevo.append(i)
+                usados.add(i)
+                break
+    
+    visitados = visitados_nuevo
+    
     orden_final = visitados + filas_sin_coord
 
     df_ordenado = df.loc[orden_final]
@@ -350,6 +400,7 @@ def reordenar_excel(
         for nombre, df in hojas_resultado.items():
 
             df.to_excel(writer, sheet_name=nombre, index=False)
+
 
 
 
