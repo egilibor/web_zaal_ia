@@ -67,25 +67,30 @@ def normalizar_texto(txt):
 
 def generar_link_pueblos(df_ruta, lat_origen, lon_origen):
 
-    pueblos = df_ruta.drop_duplicates(subset="Población")
-
     puntos = [f"{lat_origen},{lon_origen}"]
 
-    for _, row in pueblos.iterrows():
+    coords_vistas = set()
+
+    for _, row in df_ruta.iterrows():
 
         lat = row.get("Latitud")
         lon = row.get("Longitud")
 
         if pd.notna(lat) and pd.notna(lon):
 
-            puntos.append(f"{lat},{lon}")
+            clave = (round(lat,6), round(lon,6))
+
+            if clave not in coords_vistas:
+
+                coords_vistas.add(clave)
+
+                puntos.append(f"{lat},{lon}")
 
     if len(puntos) < 2:
         return ""
 
     url = "https://www.google.com/maps/dir/" + "/".join(puntos)
 
-    # Excel lo reconocerá siempre como enlace
     return url
 
 
@@ -346,4 +351,5 @@ def reordenar_excel(
         for nombre, df in hojas_resultado.items():
 
             df.to_excel(writer, sheet_name=nombre, index=False)
+
 
