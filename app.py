@@ -8,6 +8,7 @@ from pathlib import Path
 import streamlit as st
 from reordenar_rutas import reordenar_excel
 from add_resumen_unico import generar_resumen_unico
+from modulo_valencia_gestores import generar_libros_gestores
 
 # ==========================================================
 # CONFIG
@@ -188,6 +189,7 @@ with tab2:
 
     else:
         st.info("Sube el archivo para activar la reordenación.")
+
 
 
 
