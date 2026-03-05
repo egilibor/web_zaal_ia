@@ -1,14 +1,25 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import math
 from pathlib import Path
 import pandas as pd
 
 
 # -------------------------------------------------
-# CONSTANTES
+# ORÍGENES POR DEFECTO
 # -------------------------------------------------
 
-LAT0 = 39.804106
-LON0 = -0.217351
+LAT_CASTELLON = 39.804106
+LON_CASTELLON = -0.217351
+
+LAT_VALENCIA = 39.44069
+LON_VALENCIA = -0.42589
+
+
+# -------------------------------------------------
+# COLUMNAS OBLIGATORIAS
+# -------------------------------------------------
 
 COLUMNAS_OBLIGATORIAS = [
     "Exp",
@@ -29,9 +40,12 @@ COLUMNAS_OBLIGATORIAS = [
 # -------------------------------------------------
 
 def normalizar_texto(txt: str) -> str:
+
     if pd.isna(txt):
         return ""
+
     txt = str(txt).strip().upper()
+
     txt = (
         txt.replace("Á", "A")
         .replace("É", "E")
@@ -41,14 +55,20 @@ def normalizar_texto(txt: str) -> str:
         .replace("Ü", "U")
         .replace("Ñ", "N")
     )
+
     txt = " ".join(txt.split())
+
     return txt
 
 
+# -------------------------------------------------
+# CARGA COORDENADAS
+# -------------------------------------------------
+
 def cargar_coordenadas(ruta: Path) -> dict:
+
     df = pd.read_excel(ruta)
 
-    # Normalizar cabeceras: quitar espacios y pasar a mayúsculas
     df.columns = df.columns.str.strip().str.upper()
 
     columnas_necesarias = {"PUEBLO", "LATITUD", "LONGITUD"}
@@ -62,51 +82,23 @@ def cargar_coordenadas(ruta: Path) -> dict:
     coords = {}
 
     for _, row in df.iterrows():
+
         pueblo = normalizar_texto(row["PUEBLO"])
         lat = row["LATITUD"]
         lon = row["LONGITUD"]
 
         if pd.notna(pueblo) and pd.notna(lat) and pd.notna(lon):
+
             coords[pueblo] = (float(lat), float(lon))
 
     return coords
-
-    for _, row in df.iterrows():
-        pueblo = normalizar_texto(row["PUEBLO"])
-        lat = row["LATITUD"]
-        lon = row["LONGITUD"]
-
-        if pd.notna(pueblo) and pd.notna(lat) and pd.notna(lon):
-            coords[pueblo] = (float(lat), float(lon))
-
-    return coords
-
-    for _, row in df.iterrows():
-        pueblo = normalizar_texto(row["PUEBLO"])
-        lat = row["LATITUD"]
-        lon = row["LONGITUD"]
-
-        if pd.notna(pueblo) and pd.notna(lat) and pd.notna(lon):
-            coords[pueblo] = (float(lat), float(lon))
-
-    return coords
-
-
-def calcular_angulo_distancia(lat: float, lon: float):
-    dy = lat - LAT0
-    dx = lon - LON0
-
-    angulo = math.atan2(dy, dx)
-    distancia = math.sqrt(dx ** 2 + dy ** 2)
-
-    return angulo, distancia
 
 
 # -------------------------------------------------
-# ORDENACIÓN POR HOJA
+# ORDENACIÓN ZREP
 # -------------------------------------------------
 
-def ordenar_dataframe_zrep(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
+def ordenar_dataframe_zrep(df: pd.DataFrame, coords: dict, lat_origen, lon_origen):
 
     for col in COLUMNAS_OBLIGATORIAS:
         if col not in df.columns:
@@ -114,110 +106,124 @@ def ordenar_dataframe_zrep(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
 
     df = df.copy()
 
-    # Separar con y sin coordenadas
+    df["Z.Rep"] = df["Z.Rep"].fillna("")
+
     filas_con_coord = []
     filas_sin_coord = []
 
     for idx, row in df.iterrows():
+
         pueblo_norm = normalizar_texto(row["Población"])
 
         if pueblo_norm in coords:
+
             lat, lon = coords[pueblo_norm]
             filas_con_coord.append((idx, lat, lon))
+
         else:
+
             filas_sin_coord.append(idx)
 
     visitados = []
     restantes = filas_con_coord.copy()
 
-    lat_actual = LAT0
-    lon_actual = LON0
+    lat_actual = lat_origen
+    lon_actual = lon_origen
 
     while restantes:
 
-        # Calcular distancias desde punto actual
         distancias = []
+
         for item in restantes:
+
             idx, lat, lon = item
             d = (lat - lat_actual) ** 2 + (lon - lon_actual) ** 2
             distancias.append((d, idx, lat, lon))
 
-        # Elegir el más cercano
         distancias.sort(key=lambda x: (x[0], x[1]))
-        d_min, idx_sel, lat_sel, lon_sel = distancias[0]
+
+        _, idx_sel, lat_sel, lon_sel = distancias[0]
 
         visitados.append(idx_sel)
 
-        # Actualizar punto actual
         lat_actual = lat_sel
         lon_actual = lon_sel
 
-        # Quitar seleccionado
         restantes = [r for r in restantes if r[0] != idx_sel]
 
-    # Añadir los sin coordenadas al final en orden original
     orden_final = visitados + filas_sin_coord
 
     df_ordenado = df.loc[orden_final]
 
     return df_ordenado
 
-# -------------------
-# ORDENAR HOSPITALES
-# -------------------
 
-def ordenar_hospitales(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
+# -------------------------------------------------
+# ORDENAR HOSPITALES
+# -------------------------------------------------
+
+def ordenar_hospitales(df: pd.DataFrame, coords: dict, lat_origen, lon_origen):
 
     df = df.copy()
+
     df["_orden_original"] = range(len(df))
 
-    # Crear clave de parada
     df["_clave_parada"] = (
         df["Consignatario"].apply(normalizar_texto)
         + "|"
         + df["Dirección"].apply(normalizar_texto)
     )
 
-    # Agrupar paradas
     paradas = {}
 
     for idx, row in df.iterrows():
+
         clave = row["_clave_parada"]
+
         if clave not in paradas:
+
             paradas[clave] = {
                 "indices": [],
                 "poblacion": normalizar_texto(row["Población"]),
             }
+
         paradas[clave]["indices"].append(idx)
 
-    # Separar paradas con y sin coordenadas
     paradas_con_coord = []
     paradas_sin_coord = []
 
     for clave, data in paradas.items():
+
         pueblo = data["poblacion"]
 
         if pueblo in coords:
+
             lat, lon = coords[pueblo]
             paradas_con_coord.append((clave, lat, lon))
+
         else:
+
             paradas_sin_coord.append(clave)
 
-    # Vecino más cercano entre paradas
     orden_paradas = []
-    lat_actual = LAT0
-    lon_actual = LON0
+
+    lat_actual = lat_origen
+    lon_actual = lon_origen
+
     restantes = paradas_con_coord.copy()
 
     while restantes:
 
         distancias = []
+
         for clave, lat, lon in restantes:
+
             d = (lat - lat_actual) ** 2 + (lon - lon_actual) ** 2
             distancias.append((d, clave, lat, lon))
 
         distancias.sort(key=lambda x: x[0])
-        d_min, clave_sel, lat_sel, lon_sel = distancias[0]
+
+        _, clave_sel, lat_sel, lon_sel = distancias[0]
 
         orden_paradas.append(clave_sel)
 
@@ -226,18 +232,19 @@ def ordenar_hospitales(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
 
         restantes = [r for r in restantes if r[0] != clave_sel]
 
-    # Añadir sin coordenadas al final
     orden_paradas.extend(paradas_sin_coord)
 
-    # Reconstruir dataframe final
     orden_indices = []
 
     for clave in orden_paradas:
+
         indices = paradas[clave]["indices"]
+
         indices_ordenados = sorted(
             indices,
             key=lambda i: df.loc[i, "_orden_original"]
         )
+
         orden_indices.extend(indices_ordenados)
 
     df_final = df.loc[orden_indices].drop(
@@ -245,12 +252,19 @@ def ordenar_hospitales(df: pd.DataFrame, coords: dict) -> pd.DataFrame:
     )
 
     return df_final
-    
+
+
 # -------------------------------------------------
 # FUNCIÓN PRINCIPAL
 # -------------------------------------------------
 
-def reordenar_excel(input_path: Path, output_path: Path, ruta_coordenadas: Path):
+def reordenar_excel(
+    input_path: Path,
+    output_path: Path,
+    ruta_coordenadas: Path,
+    lat_origen: float = LAT_CASTELLON,
+    lon_origen: float = LON_CASTELLON,
+):
 
     hojas = pd.read_excel(input_path, sheet_name=None)
 
@@ -261,25 +275,33 @@ def reordenar_excel(input_path: Path, output_path: Path, ruta_coordenadas: Path)
     for nombre, df in hojas.items():
 
         if nombre.startswith("ZREP_"):
-            df_ordenado = ordenar_dataframe_zrep(df, coords)
+
+            df_ordenado = ordenar_dataframe_zrep(
+                df,
+                coords,
+                lat_origen,
+                lon_origen,
+            )
+
             hojas_resultado[nombre] = df_ordenado
-        
+
         elif nombre == "HOSPITALES":
-            df_ordenado = ordenar_hospitales(df, coords)
+
+            df_ordenado = ordenar_hospitales(
+                df,
+                coords,
+                lat_origen,
+                lon_origen,
+            )
+
             hojas_resultado[nombre] = df_ordenado
-        
+
         else:
-            hojas_resultado[nombre] = df 
+
+            hojas_resultado[nombre] = df
 
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+
         for nombre, df in hojas_resultado.items():
 
             df.to_excel(writer, sheet_name=nombre, index=False)
-
-
-
-
-
-
-
-
