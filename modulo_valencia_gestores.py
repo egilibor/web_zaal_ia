@@ -80,7 +80,7 @@ def generar_libros_gestores(
         gestores_detectados = sorted(df_asignacion["GESTOR"].unique())
 
         # -------------------------------------------------
-        # Validación importante
+        # Validación crítica
         # -------------------------------------------------
         zonas_sin_gestor = zonas_libro_set - zonas_asignadas
 
@@ -91,7 +91,7 @@ def generar_libros_gestores(
             return resultado
 
         # -------------------------------------------------
-        # Generar Excel por gestor
+        # Generación por gestor
         # -------------------------------------------------
         for gestor in gestores_detectados:
 
@@ -102,8 +102,8 @@ def generar_libros_gestores(
             if not zonas_gestor_norm:
                 continue
 
-            wb_nuevo = Workbook()
-            wb_nuevo.remove(wb_nuevo.active)
+            wb = Workbook()
+            wb.remove(wb.active)
 
             dfs_todo = []
 
@@ -113,7 +113,7 @@ def generar_libros_gestores(
 
                 df_zona = pd.read_excel(ruta_excel_final, sheet_name=zona_real)
 
-                ws = wb_nuevo.create_sheet(title=zona_real)
+                ws = wb.create_sheet(title=zona_real)
 
                 ws.append(list(df_zona.columns))
 
@@ -123,12 +123,12 @@ def generar_libros_gestores(
                 df_zona["ZONA"] = zona_real
                 dfs_todo.append(df_zona)
 
-            # -------------------------------------------------
-            # TODO
-            # -------------------------------------------------
             df_todo = pd.concat(dfs_todo, ignore_index=True)
 
-            ws_todo = wb_nuevo.create_sheet(title="TODO")
+            # -------------------------------------------------
+            # Hoja TODO
+            # -------------------------------------------------
+            ws_todo = wb.create_sheet("TODO")
 
             ws_todo.append(list(df_todo.columns))
 
@@ -138,10 +138,10 @@ def generar_libros_gestores(
             # -------------------------------------------------
             # RESUMEN_UNICO
             # -------------------------------------------------
-            ws_resumen = wb_nuevo.create_sheet(title="RESUMEN_UNICO")
+            ws_resumen = wb.create_sheet("RESUMEN_UNICO")
 
             ws_resumen["A1"] = "Total expediciones"
-            ws_resumen["B1"] = "=CONTARA(TODO!A:A)-1"
+            ws_resumen["B1"] = "=COUNTA(TODO!A:A)-1"
 
             if "Kgs" in df_todo.columns:
 
@@ -149,7 +149,7 @@ def generar_libros_gestores(
                 col_letter = ws_todo.cell(row=1, column=col_kgs).column_letter
 
                 ws_resumen["A2"] = "Total Kgs"
-                ws_resumen["B2"] = f"=SUMA(TODO!{col_letter}:{col_letter})"
+                ws_resumen["B2"] = f"=SUM(TODO!{col_letter}:{col_letter})"
 
             ws_resumen["A4"] = "Totales por zona"
 
@@ -162,11 +162,11 @@ def generar_libros_gestores(
 
             for i, zona in enumerate(zonas_unicas):
 
-                fila_actual = fila_inicio + i
+                fila = fila_inicio + i
 
-                ws_resumen[f"A{fila_actual}"] = zona
-                ws_resumen[f"B{fila_actual}"] = (
-                    f'=CONTAR.SI(TODO!{col_zona_letter}:{col_zona_letter};"{zona}")'
+                ws_resumen[f"A{fila}"] = zona
+                ws_resumen[f"B{fila}"] = (
+                    f'=COUNTIF(TODO!{col_zona_letter}:{col_zona_letter},"{zona}")'
                 )
 
             # -------------------------------------------------
@@ -176,7 +176,7 @@ def generar_libros_gestores(
 
             ruta_salida = Path(carpeta_salida) / nombre_archivo
 
-            wb_nuevo.save(ruta_salida)
+            wb.save(ruta_salida)
 
             resultado["archivos_generados"][gestor] = str(ruta_salida)
 
