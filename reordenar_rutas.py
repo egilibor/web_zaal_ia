@@ -36,10 +36,10 @@ COLUMNAS_OBLIGATORIAS = [
 
 
 # -------------------------------------------------
-# UTILIDADES
+# NORMALIZAR TEXTO
 # -------------------------------------------------
 
-def normalizar_texto(txt: str):
+def normalizar_texto(txt):
 
     if pd.isna(txt):
         return ""
@@ -62,7 +62,7 @@ def normalizar_texto(txt: str):
 
 
 # -------------------------------------------------
-# GOOGLE MAPS LINK (PUEBLOS)
+# GOOGLE MAPS LINK
 # -------------------------------------------------
 
 def generar_link_pueblos(df_ruta, lat_origen, lon_origen):
@@ -80,14 +80,20 @@ def generar_link_pueblos(df_ruta, lat_origen, lon_origen):
 
             puntos.append(f"{lat},{lon}")
 
-    return "https://www.google.com/maps/dir/" + "/".join(puntos)
+    if len(puntos) < 2:
+        return ""
+
+    url = "https://www.google.com/maps/dir/" + "/".join(puntos)
+
+    # Excel lo reconocerá siempre como enlace
+    return f'=HYPERLINK("{url}","Abrir ruta en Google Maps")'
 
 
 # -------------------------------------------------
-# CARGA COORDENADAS
+# CARGAR COORDENADAS
 # -------------------------------------------------
 
-def cargar_coordenadas(ruta: Path):
+def cargar_coordenadas(ruta):
 
     df = pd.read_excel(ruta)
 
@@ -95,7 +101,8 @@ def cargar_coordenadas(ruta: Path):
 
     columnas_necesarias = {"PUEBLO", "LATITUD", "LONGITUD"}
 
-    if not columnas_necesarias.issubset(set(df.columns)):
+    if not columnas_necesarias.issubset(df.columns):
+
         raise ValueError(
             f"Columnas detectadas: {list(df.columns)}. "
             "Se esperaban: PUEBLO, LATITUD, LONGITUD."
@@ -312,7 +319,10 @@ def reordenar_excel(
 
             link = generar_link_pueblos(df_ordenado, lat_origen, lon_origen)
 
-            df_ordenado.insert(0, "NAVEGACIÓN", link)
+            df_ordenado.insert(0, "NAVEGACIÓN", "")
+
+            if link:
+                df_ordenado.loc[df_ordenado.index[0], "NAVEGACIÓN"] = link
 
             hojas_resultado[nombre] = df_ordenado
 
