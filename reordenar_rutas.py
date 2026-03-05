@@ -39,7 +39,7 @@ COLUMNAS_OBLIGATORIAS = [
 # UTILIDADES
 # -------------------------------------------------
 
-def normalizar_texto(txt: str) -> str:
+def normalizar_texto(txt: str):
 
     if pd.isna(txt):
         return ""
@@ -62,10 +62,32 @@ def normalizar_texto(txt: str) -> str:
 
 
 # -------------------------------------------------
+# GOOGLE MAPS LINK (PUEBLOS)
+# -------------------------------------------------
+
+def generar_link_pueblos(df_ruta, lat_origen, lon_origen):
+
+    pueblos = df_ruta.drop_duplicates(subset="Población")
+
+    puntos = [f"{lat_origen},{lon_origen}"]
+
+    for _, row in pueblos.iterrows():
+
+        lat = row.get("Latitud")
+        lon = row.get("Longitud")
+
+        if pd.notna(lat) and pd.notna(lon):
+
+            puntos.append(f"{lat},{lon}")
+
+    return "https://www.google.com/maps/dir/" + "/".join(puntos)
+
+
+# -------------------------------------------------
 # CARGA COORDENADAS
 # -------------------------------------------------
 
-def cargar_coordenadas(ruta: Path) -> dict:
+def cargar_coordenadas(ruta: Path):
 
     df = pd.read_excel(ruta)
 
@@ -98,7 +120,7 @@ def cargar_coordenadas(ruta: Path) -> dict:
 # ORDENACIÓN ZREP
 # -------------------------------------------------
 
-def ordenar_dataframe_zrep(df: pd.DataFrame, coords: dict, lat_origen, lon_origen):
+def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen):
 
     for col in COLUMNAS_OBLIGATORIAS:
         if col not in df.columns:
@@ -106,7 +128,8 @@ def ordenar_dataframe_zrep(df: pd.DataFrame, coords: dict, lat_origen, lon_orige
 
     df = df.copy()
 
-    df["Z.Rep"] = df["Z.Rep"].fillna("")
+    df["Latitud"] = None
+    df["Longitud"] = None
 
     filas_con_coord = []
     filas_sin_coord = []
@@ -118,8 +141,10 @@ def ordenar_dataframe_zrep(df: pd.DataFrame, coords: dict, lat_origen, lon_orige
         if pueblo_norm in coords:
 
             lat, lon = coords[pueblo_norm]
+
             df.at[idx, "Latitud"] = lat
             df.at[idx, "Longitud"] = lon
+
             filas_con_coord.append((idx, lat, lon))
 
         else:
@@ -164,7 +189,7 @@ def ordenar_dataframe_zrep(df: pd.DataFrame, coords: dict, lat_origen, lon_orige
 # ORDENAR HOSPITALES
 # -------------------------------------------------
 
-def ordenar_hospitales(df: pd.DataFrame, coords: dict, lat_origen, lon_origen):
+def ordenar_hospitales(df, coords, lat_origen, lon_origen):
 
     df = df.copy()
 
@@ -285,6 +310,10 @@ def reordenar_excel(
                 lon_origen,
             )
 
+            link = generar_link_pueblos(df_ordenado, lat_origen, lon_origen)
+
+            df_ordenado.insert(0, "NAVEGACIÓN", link)
+
             hojas_resultado[nombre] = df_ordenado
 
         elif nombre == "HOSPITALES":
@@ -307,4 +336,3 @@ def reordenar_excel(
         for nombre, df in hojas_resultado.items():
 
             df.to_excel(writer, sheet_name=nombre, index=False)
-
