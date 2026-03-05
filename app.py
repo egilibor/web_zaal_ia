@@ -41,7 +41,7 @@ if st.session_state.delegacion_activa != delegacion:
 # archivos de coordenadas por delegación
 COORDENADAS_FILES = {
     "castellon": "Libro_de_Servicio_Castellon_con_coordenadas.xlsx",
-    "valencia": "valencia.municipios.coordenadas.xlsx",
+    "valencia": "valencia_municipios_coordenadas.xlsx",
 }
 
 COORDENADAS_REPO = REPO_DIR / COORDENADAS_FILES[delegacion]
@@ -188,6 +188,7 @@ with tab2:
 
     else:
         st.info("Sube el archivo para activar la reordenación.")
+
 
 
 
