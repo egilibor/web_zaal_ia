@@ -112,7 +112,7 @@ def style_sheet(ws):
 # CORE
 # -------------------------
 
-def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
+def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegacion: str) -> None:
 
     df = pd.read_csv(
         csv_path,
@@ -180,8 +180,9 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
 
     # METADATOS
     meta = pd.DataFrame({
-        "Clave": ["Origen de datos", "CSV", "Reglas", "Generado"],
+        "Clave": ["Delegación", "Origen de datos", "CSV", "Reglas", "Generado"],
         "Valor": [
+            delegacion,
             origen,
             str(csv_path),
             str(reglas_path),
@@ -242,13 +243,16 @@ def main():
     parser.add_argument("--csv")
     parser.add_argument("--reglas")
     parser.add_argument("--out")
+    parser.add_argument("--delegacion", default="castellon")
+
     args = parser.parse_args()
 
     csv_p = Path(args.csv)
     reglas_p = Path(args.reglas)
     out_p = Path(args.out)
 
-    run(csv_p, reglas_p, out_p, "LLEGADAS")
+    run(csv_p, reglas_p, out_p, "LLEGADAS", args.delegacion)
+
     print(f"OK: generado {out_p}")
 
 
