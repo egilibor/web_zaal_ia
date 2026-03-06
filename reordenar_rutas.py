@@ -191,10 +191,16 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen):
 
             lat, lon = coords[pueblo_norm]
 
-            df.at[idx, "Latitud"] = lat
-            df.at[idx, "Longitud"] = lon
+            if pd.notna(lat) and pd.notna(lon):
 
-            filas_con_coord.append((idx, lat, lon))
+                df.at[idx, "Latitud"] = lat
+                df.at[idx, "Longitud"] = lon
+
+                filas_con_coord.append((idx, float(lat), float(lon)))
+
+            else:
+
+                filas_sin_coord.append(idx)
 
         else:
 
@@ -278,8 +284,9 @@ def reordenar_excel(
 
             link = generar_link_pueblos(df_ordenado, lat_origen, lon_origen)
 
-            #df_ordenado.insert(0, "NAVEGACIÓN", "")
+            # Columna navegación al final (no rompe RESUMEN_UNICO)
             df_ordenado["NAVEGACIÓN"] = ""
+
             if link:
                 df_ordenado.loc[df_ordenado.index[0], "NAVEGACIÓN"] = link
 
@@ -294,4 +301,3 @@ def reordenar_excel(
         for nombre, df in hojas_resultado.items():
 
             df.to_excel(writer, sheet_name=nombre, index=False)
-
