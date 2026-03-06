@@ -165,12 +165,26 @@ with tab2:
         if st.button("Reordenar rutas", key="fase2_btn"):
 
             try:
+                
+                if delegacion == "valencia":
+                    lat_origen = LAT_VALENCIA
+                    lon_origen = LON_VALENCIA
+                else:
+                    lat_origen = LAT_CASTELLON
+                    lon_origen = LON_CASTELLON
 
                 reordenar_excel(
-                    input_path=input_path,
-                    output_path=output_path,
-                    ruta_coordenadas=COORDENADAS_REPO,
+                    input_path,
+                    output_path,
+                    COORDENADAS_REPO,
+                    lat_origen,
+                    lon_origen
                 )
+                #reordenar_excel(
+                 #   input_path=input_path,
+                  #  output_path=output_path,
+                  #  ruta_coordenadas=COORDENADAS_REPO,
+                #)
 
                 generar_resumen_unico(str(output_path))
 
@@ -241,6 +255,7 @@ with tab2:
     else:
 
         st.info("Sube el archivo para activar la reordenación.")
+
 
 
 
