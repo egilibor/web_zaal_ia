@@ -2,10 +2,15 @@ from datetime import datetime
 from pathlib import Path
 import pandas as pd
 from openpyxl import Workbook
+import re
 
 
 def _normalizar(texto: str) -> str:
-    return " ".join(str(texto).strip().split())
+    texto = str(texto)
+    texto = texto.strip()
+    texto = re.sub(r"\s+", " ", texto)
+    texto = texto.replace("\n", "").replace("\t", "")
+    return texto
 
 
 def generar_libros_gestores(
@@ -22,9 +27,6 @@ def generar_libros_gestores(
 
     try:
 
-        # -------------------------------------------------
-        # Validaciones básicas
-        # -------------------------------------------------
         if not Path(ruta_excel_final).exists():
             resultado["errores"].append("No existe el Excel final validado.")
             return resultado
@@ -40,6 +42,7 @@ def generar_libros_gestores(
         # -------------------------------------------------
         # Detectar hojas territoriales
         # -------------------------------------------------
+
         xls = pd.ExcelFile(ruta_excel_final)
 
         hojas_libro = xls.sheet_names
@@ -57,6 +60,7 @@ def generar_libros_gestores(
         # -------------------------------------------------
         # Leer asignación
         # -------------------------------------------------
+
         df_asignacion = pd.read_excel(ruta_asignacion)
 
         if not {"ZONA_REP", "GESTOR"}.issubset(df_asignacion.columns):
@@ -69,6 +73,7 @@ def generar_libros_gestores(
         df_asignacion["GESTOR"] = df_asignacion["GESTOR"].astype(str).str.strip()
 
         duplicadas = df_asignacion["ZONA_REP"][df_asignacion["ZONA_REP"].duplicated()]
+
         if not duplicadas.empty:
             resultado["errores"].append(
                 f"Zonas duplicadas en gestor_zonas.xlsx: {list(duplicadas)}"
@@ -76,23 +81,31 @@ def generar_libros_gestores(
             return resultado
 
         zonas_asignadas = set(df_asignacion["ZONA_REP"])
-        mapa_zona_gestor = dict(zip(df_asignacion["ZONA_REP"], df_asignacion["GESTOR"]))
+
+        mapa_zona_gestor = dict(
+            zip(df_asignacion["ZONA_REP"], df_asignacion["GESTOR"])
+        )
+
         gestores_detectados = sorted(df_asignacion["GESTOR"].unique())
 
         # -------------------------------------------------
         # Validación crítica
         # -------------------------------------------------
+
         zonas_sin_gestor = zonas_libro_set - zonas_asignadas
 
         if zonas_sin_gestor:
+
             resultado["errores"].append(
                 f"Zonas sin asignación en gestor_zonas.xlsx: {list(zonas_sin_gestor)}"
             )
+
             return resultado
 
         # -------------------------------------------------
         # Generación por gestor
         # -------------------------------------------------
+
         for gestor in gestores_detectados:
 
             zonas_gestor_norm = [
@@ -121,6 +134,7 @@ def generar_libros_gestores(
                     ws.append(list(fila))
 
                 df_zona["ZONA"] = zona_real
+
                 dfs_todo.append(df_zona)
 
             df_todo = pd.concat(dfs_todo, ignore_index=True)
@@ -128,6 +142,7 @@ def generar_libros_gestores(
             # -------------------------------------------------
             # Hoja TODO
             # -------------------------------------------------
+
             ws_todo = wb.create_sheet("TODO")
 
             ws_todo.append(list(df_todo.columns))
@@ -136,58 +151,57 @@ def generar_libros_gestores(
                 ws_todo.append(list(fila))
 
             # -------------------------------------------------
-            # RESUMEN_UNICO
+            # RESUMEN
             # -------------------------------------------------
-            
+
             ws_resumen = wb.create_sheet("RESUMEN_UNICO")
-            
-            # mover al inicio
+
             wb._sheets.remove(ws_resumen)
             wb._sheets.insert(0, ws_resumen)
-            
+
             ws_resumen["A1"] = "Total expediciones"
             ws_resumen["B1"] = "=COUNTA(TODO!A:A)-1"
-            
+
             if "Kgs" in df_todo.columns:
-            
+
                 col_kgs = df_todo.columns.get_loc("Kgs") + 1
                 col_kgs_letter = ws_todo.cell(row=1, column=col_kgs).column_letter
-            
+
                 ws_resumen["A2"] = "Total Kgs"
                 ws_resumen["B2"] = f"=SUM(TODO!{col_kgs_letter}:{col_kgs_letter})"
-            
-            # encabezado tabla
+
             ws_resumen["A4"] = "Zona"
             ws_resumen["B4"] = "Expediciones"
             ws_resumen["C4"] = "Kgs"
-            
+
             col_zona = df_todo.columns.get_loc("ZONA") + 1
             col_zona_letter = ws_todo.cell(row=1, column=col_zona).column_letter
-            
+
             zonas_unicas = sorted(df_todo["ZONA"].unique())
-            
+
             fila_inicio = 5
-            
+
             for i, zona in enumerate(zonas_unicas):
-            
+
                 fila = fila_inicio + i
-            
+
                 ws_resumen[f"A{fila}"] = zona
-            
+
                 ws_resumen[f"B{fila}"] = (
                     f'=COUNTIF(TODO!{col_zona_letter}:{col_zona_letter},"{zona}")'
                 )
-            
+
                 if "Kgs" in df_todo.columns:
-            
+
                     ws_resumen[f"C{fila}"] = (
                         f'=SUMIF(TODO!{col_zona_letter}:{col_zona_letter},"{zona}",'
                         f'TODO!{col_kgs_letter}:{col_kgs_letter})'
                     )
 
             # -------------------------------------------------
-            # Guardar archivo
+            # Guardar
             # -------------------------------------------------
+
             nombre_archivo = f"VALENCIA_{fecha_hoy}_{gestor}.xlsx"
 
             ruta_salida = Path(carpeta_salida) / nombre_archivo
@@ -200,5 +214,6 @@ def generar_libros_gestores(
         return resultado
 
     except Exception as e:
+
         resultado["errores"].append(str(e))
         return resultado
