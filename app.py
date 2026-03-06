@@ -180,11 +180,6 @@ with tab2:
                     lat_origen,
                     lon_origen
                 )
-                #reordenar_excel(
-                 #   input_path=input_path,
-                  #  output_path=output_path,
-                  #  ruta_coordenadas=COORDENADAS_REPO,
-                #)
 
                 generar_resumen_unico(str(output_path))
 
@@ -255,6 +250,7 @@ with tab2:
     else:
 
         st.info("Sube el archivo para activar la reordenación.")
+
 
 
 
