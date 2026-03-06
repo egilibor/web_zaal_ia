@@ -278,8 +278,8 @@ def reordenar_excel(
 
             link = generar_link_pueblos(df_ordenado, lat_origen, lon_origen)
 
-            df_ordenado.insert(0, "NAVEGACIÓN", "")
-
+            #df_ordenado.insert(0, "NAVEGACIÓN", "")
+            df_ordenado["NAVEGACIÓN"] = ""
             if link:
                 df_ordenado.loc[df_ordenado.index[0], "NAVEGACIÓN"] = link
 
@@ -294,3 +294,4 @@ def reordenar_excel(
         for nombre, df in hojas_resultado.items():
 
             df.to_excel(writer, sheet_name=nombre, index=False)
+
