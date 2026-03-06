@@ -5,6 +5,10 @@ from openpyxl import Workbook
 import re
 
 
+# -------------------------------------------------
+# NORMALIZACIÓN
+# -------------------------------------------------
+
 def _normalizar(texto: str) -> str:
     texto = str(texto)
     texto = texto.strip()
@@ -12,6 +16,24 @@ def _normalizar(texto: str) -> str:
     texto = texto.replace("\n", "").replace("\t", "")
     return texto
 
+
+# -------------------------------------------------
+# VALIDACIÓN DE ZONAS
+# -------------------------------------------------
+
+def validar_zonas_excel_vs_gestores(zonas_excel, zonas_gestores):
+
+    zonas_sin_gestor = zonas_excel - zonas_gestores
+
+    if zonas_sin_gestor:
+        raise ValueError(
+            f"Zonas sin asignación en gestor_zonas.xlsx: {sorted(zonas_sin_gestor)}"
+        )
+
+
+# -------------------------------------------------
+# FUNCIÓN PRINCIPAL
+# -------------------------------------------------
 
 def generar_libros_gestores(
     ruta_excel_final: str,
@@ -27,6 +49,10 @@ def generar_libros_gestores(
 
     try:
 
+        # -------------------------------------------------
+        # VALIDACIONES BÁSICAS
+        # -------------------------------------------------
+
         if not Path(ruta_excel_final).exists():
             resultado["errores"].append("No existe el Excel final validado.")
             return resultado
@@ -40,7 +66,7 @@ def generar_libros_gestores(
         fecha_hoy = datetime.today().strftime("%Y-%m-%d")
 
         # -------------------------------------------------
-        # Detectar hojas territoriales
+        # DETECTAR HOJAS TERRITORIALES
         # -------------------------------------------------
 
         xls = pd.ExcelFile(ruta_excel_final)
@@ -58,7 +84,7 @@ def generar_libros_gestores(
         zonas_libro_set = set(mapa_hojas.keys())
 
         # -------------------------------------------------
-        # Leer asignación
+        # LEER ASIGNACIÓN DE GESTORES
         # -------------------------------------------------
 
         df_asignacion = pd.read_excel(ruta_asignacion)
@@ -89,21 +115,16 @@ def generar_libros_gestores(
         gestores_detectados = sorted(df_asignacion["GESTOR"].unique())
 
         # -------------------------------------------------
-        # Validación crítica
+        # VALIDACIÓN CENTRALIZADA
         # -------------------------------------------------
 
-        zonas_sin_gestor = zonas_libro_set - zonas_asignadas
-
-        if zonas_sin_gestor:
-
-            resultado["errores"].append(
-                f"Zonas sin asignación en gestor_zonas.xlsx: {list(zonas_sin_gestor)}"
-            )
-
-            return resultado
+        validar_zonas_excel_vs_gestores(
+            zonas_libro_set,
+            zonas_asignadas
+        )
 
         # -------------------------------------------------
-        # Generación por gestor
+        # GENERACIÓN DE ARCHIVOS POR GESTOR
         # -------------------------------------------------
 
         for gestor in gestores_detectados:
@@ -124,7 +145,10 @@ def generar_libros_gestores(
 
                 zona_real = mapa_hojas[zona_norm]
 
-                df_zona = pd.read_excel(ruta_excel_final, sheet_name=zona_real)
+                df_zona = pd.read_excel(
+                    ruta_excel_final,
+                    sheet_name=zona_real
+                )
 
                 ws = wb.create_sheet(title=zona_real)
 
@@ -140,7 +164,7 @@ def generar_libros_gestores(
             df_todo = pd.concat(dfs_todo, ignore_index=True)
 
             # -------------------------------------------------
-            # Hoja TODO
+            # HOJA TODO
             # -------------------------------------------------
 
             ws_todo = wb.create_sheet("TODO")
@@ -199,7 +223,7 @@ def generar_libros_gestores(
                     )
 
             # -------------------------------------------------
-            # Guardar
+            # GUARDAR
             # -------------------------------------------------
 
             nombre_archivo = f"VALENCIA_{fecha_hoy}_{gestor}.xlsx"
