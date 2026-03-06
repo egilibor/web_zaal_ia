@@ -164,7 +164,13 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
     hosp = df[df["is_hospital"]].copy()
     fed = df[df["is_fed"]].copy()
     resto = df[~df["is_any_special"]].copy()
-
+    resto["Z.Rep"] = (
+        resto["Z.Rep"]
+        .astype(str)
+        .str.strip()
+        .replace(".", "")
+    )
+    
     # -------------------------
     # EXCEL
     # -------------------------
