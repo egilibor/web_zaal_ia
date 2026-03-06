@@ -37,7 +37,7 @@ def generar_resumen_unico(ruta_excel: str) -> None:
         ws = wb[hoja]
 
         col_bultos = encontrar_columna(ws, "Bultos")
-        col_kilos = encontrar_columna(ws, "Kilos")
+        col_kilos = encontrar_columna(ws, "Kgs") or encontrar_columna(ws, "Kilos")
 
         letra_bultos = ws.cell(row=1, column=col_bultos).column_letter
         letra_kilos = ws.cell(row=1, column=col_kilos).column_letter
@@ -55,3 +55,4 @@ def generar_resumen_unico(ruta_excel: str) -> None:
     ws_res.column_dimensions["D"].width = 15
 
     wb.save(ruta_excel)
+
