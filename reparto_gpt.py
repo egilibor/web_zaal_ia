@@ -211,6 +211,11 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
     existing = set(wb_out.sheetnames)
 
     for z, sub in resto.groupby("Z.Rep"):
+
+        z = str(z).strip()
+        if z == ".":
+            z = ""
+
         nombre = f"ZREP_{z}"
         nombre = re.sub(r"[\\/*?:\[\]]", "_", nombre)[:31]
 
