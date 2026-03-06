@@ -167,11 +167,11 @@ with tab2:
             try:
                 
                 if delegacion == "valencia":
-                    lat_origen = LAT_VALENCIA
-                    lon_origen = LON_VALENCIA
+                    lat_origen = 39.44069
+                    lon_origen = -0.42589
                 else:
-                    lat_origen = LAT_CASTELLON
-                    lon_origen = LON_CASTELLON
+                    lat_origen = 39.804106
+                    lon_origen = -0.217351
 
                 reordenar_excel(
                     input_path,
@@ -255,6 +255,7 @@ with tab2:
     else:
 
         st.info("Sube el archivo para activar la reordenación.")
+
 
 
 
