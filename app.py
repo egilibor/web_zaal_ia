@@ -73,11 +73,11 @@ with st.sidebar:
 # MENÚ HORIZONTAL
 # ==========================================================
 
-tab1, tab2 = st.tabs([
+tab1, tab2, tab3 = st.tabs([
     "FASE 1 · Asignación reparto",
-    "FASE 2 · Reordenación topográfica"
+    "FASE 2 · Reordenación topográfica",
+    "FASE 3 · Callejero"
 ])
-
 
 # ==========================================================
 # FASE 1
@@ -251,6 +251,54 @@ with tab2:
 
         st.info("Sube el archivo para activar la reordenación.")
 
+# ==========================================================
+# FASE 3
+# ==========================================================
+
+with tab3:
+
+    st.subheader("Optimización urbana (OpenRouteService)")
+
+    archivo_excel = st.file_uploader(
+        "Subir salida_reordenada.xlsx",
+        type=["xlsx"],
+        key="fase3_excel"
+    )
+
+    if archivo_excel:
+
+        input_path = workdir / "entrada_fase3.xlsx"
+        output_path = workdir / "salida_callejero.xlsx"
+
+        input_path.write_bytes(archivo_excel.getbuffer())
+
+        api_key = st.text_input("API KEY OpenRouteService")
+
+        if st.button("Optimizar rutas urbanas", key="fase3_btn"):
+
+            try:
+
+                from optimizar_callejero import optimizar_rutas_callejero
+
+                optimizar_rutas_callejero(
+                    input_excel=input_path,
+                    output_excel=output_path,
+                    api_key=api_key
+                )
+
+                if output_path.exists():
+
+                    st.success("Callejero optimizado")
+
+                    st.download_button(
+                        "Descargar salida_callejero.xlsx",
+                        data=output_path.read_bytes(),
+                        file_name="salida_callejero.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+
+            except Exception as e:
+                st.error(f"Error optimizando: {e}")
 
 
 
