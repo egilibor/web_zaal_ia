@@ -42,7 +42,9 @@ def optimizar_rutas_callejero(input_excel, output_excel, api_key):
             continue
 
         coords = list(zip(df["Latitud"], df["Longitud"]))
-
+        MAX_PUNTOS = 50
+        coords = coords[:MAX_PUNTOS]
+        df = df.iloc[:MAX_PUNTOS]
         matriz = matriz_ors(coords, api_key)
 
         # orden simple inicial
@@ -54,3 +56,4 @@ def optimizar_rutas_callejero(input_excel, output_excel, api_key):
 
 
     writer.close()
+
