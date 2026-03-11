@@ -15,10 +15,18 @@ def matriz_ors(coords, api_key):
         "locations": [[lon, lat] for lat, lon in coords]
     }
 
+    #r = requests.post(url, json=body, headers=headers)
+
+    #return r.json()["durations"]
+
     r = requests.post(url, json=body, headers=headers)
-
-    return r.json()["durations"]
-
+    
+    data = r.json()
+    
+    if "durations" not in data:
+        raise Exception(f"Error ORS: {data}")
+    
+    return data["durations"]
 
 def optimizar_rutas_callejero(input_excel, output_excel, api_key):
 
@@ -43,5 +51,6 @@ def optimizar_rutas_callejero(input_excel, output_excel, api_key):
         df = df.iloc[orden]
 
         df.to_excel(writer, sheet_name=sheet, index=False)
+
 
     writer.close()
