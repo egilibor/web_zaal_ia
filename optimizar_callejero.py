@@ -64,14 +64,14 @@ def optimizar_rutas_callejero(input_excel, output_excel, api_key):
         if len(df) < 2:
             raise Exception("No hay suficientes coordenadas válidas")
 
-        coords = list(zip(df["Latitud"], df["Longitud"]))
-
+        coords = df[["Longitud","Latitud"]].astype(float).values.tolist()
+        
         # límite ORS
         MAX_PUNTOS = 50
         coords = coords[:MAX_PUNTOS]
         df = df.iloc[:MAX_PUNTOS]
-        st.write(df[["Latitud","Longitud"]].head())
-        st.write(coords[:5])
+        #st.write(df[["Latitud","Longitud"]].head())
+        #st.write(coords[:5])
         matriz = matriz_ors(coords, api_key)
 
         # orden simple desde el primer punto
@@ -81,6 +81,7 @@ def optimizar_rutas_callejero(input_excel, output_excel, api_key):
         df.to_excel(writer, sheet_name=sheet, index=False)
 
     writer.close()
+
 
 
 
