@@ -14,14 +14,11 @@ def matriz_ors(coords, api_key):
     locations = []
 
     for lat, lon in coords:
-
-        if pd.isna(lat) or pd.isna(lon):
-            continue
-
         locations.append([float(lon), float(lat)])
 
     body = {
-        "locations": locations
+        "locations": locations,
+        "metrics": ["duration"]
     }
 
     r = requests.post(url, json=body, headers=headers)
@@ -69,5 +66,6 @@ def optimizar_rutas_callejero(input_excel, output_excel, api_key):
         df.to_excel(writer, sheet_name=sheet, index=False)
 
     writer.close()
+
 
 
