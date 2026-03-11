@@ -73,12 +73,13 @@ def optimizar_rutas_callejero(input_excel, output_excel, api_key):
         matriz = matriz_ors(coords, api_key)
 
         # orden simple desde el primer punto
-        orden = sorted(range(len(coords)), key=lambda i: matriz[0][i])
+        orden = sorted(range(len(coords)), key=lambda i: matriz[0][i] if matriz[0][i] is not None else 999999)
         df = df.iloc[orden]
 
         df.to_excel(writer, sheet_name=sheet, index=False)
 
     writer.close()
+
 
 
 
