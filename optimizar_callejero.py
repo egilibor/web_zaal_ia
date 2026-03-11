@@ -37,14 +37,23 @@ def optimizar_rutas_callejero(input_excel, output_excel, api_key):
 
         df = pd.read_excel(xls, sheet)
 
-        if "Latitud" not in df.columns:
+        # si no hay coordenadas, copiar hoja sin tocar
+        if "Latitud" not in df.columns or "Longitud" not in df.columns:
             df.to_excel(writer, sheet_name=sheet, index=False)
             continue
 
+        # asegurar coordenadas válidas
+        df["Latitud"] = pd.to_numeric(df["Latitud"], errors="coerce")
+        df["Longitud"] = pd.to_numeric(df["Longitud"], errors="coerce")
+
+        df = df.dropna(subset=["Latitud", "Longitud"])
+
         coords = list(zip(df["Latitud"], df["Longitud"]))
+
         MAX_PUNTOS = 50
         coords = coords[:MAX_PUNTOS]
         df = df.iloc[:MAX_PUNTOS]
+
         matriz = matriz_ors(coords, api_key)
 
         # orden simple inicial
@@ -54,6 +63,4 @@ def optimizar_rutas_callejero(input_excel, output_excel, api_key):
 
         df.to_excel(writer, sheet_name=sheet, index=False)
 
-
     writer.close()
-
