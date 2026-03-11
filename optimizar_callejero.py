@@ -1,5 +1,5 @@
-import pandas as pd
 import requests
+import pandas as pd
 
 
 def matriz_ors(coords, api_key):
@@ -13,8 +13,22 @@ def matriz_ors(coords, api_key):
 
     locations = []
 
+    # limpiar coordenadas
     for lat, lon in coords:
-        locations.append([float(lon), float(lat)])
+
+        try:
+            lat = float(lat)
+            lon = float(lon)
+        except:
+            continue
+
+        if pd.isna(lat) or pd.isna(lon):
+            continue
+
+        locations.append([lon, lat])  # ORS usa [lon, lat]
+
+    if len(locations) < 2:
+        raise Exception("No hay suficientes coordenadas válidas")
 
     body = {
         "locations": locations,
@@ -66,6 +80,7 @@ def optimizar_rutas_callejero(input_excel, output_excel, api_key):
         df.to_excel(writer, sheet_name=sheet, index=False)
 
     writer.close()
+
 
 
 
