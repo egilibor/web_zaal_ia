@@ -2,28 +2,27 @@ import pandas as pd
 import requests
 
 def matriz_ors(coords, api_key):
+
     url = "https://api.openrouteservice.org/v2/matrix/driving-car"
+
     headers = {
         "Authorization": api_key,
         "Content-Type": "application/json"
     }
 
-    # coords vienen como (lat, lon) → ORS requiere [lon, lat]
-    locations = [[float(lon), float(lat)] for lat, lon in coords]
-
     body = {
-        "locations": locations,
+        "locations": coords,
         "metrics": ["duration"]
     }
 
     r = requests.post(url, json=body, headers=headers)
+
     data = r.json()
 
     if "durations" not in data:
         raise Exception(f"Error ORS: {data}")
 
     return data["durations"]
-
 
 def optimizar_rutas_callejero(input_excel, output_excel, api_key):
 
@@ -80,6 +79,7 @@ def optimizar_rutas_callejero(input_excel, output_excel, api_key):
         df.to_excel(writer, sheet_name=sheet, index=False)
 
     writer.close()
+
 
 
 
