@@ -1,7 +1,6 @@
 import requests
 import pandas as pd
 
-
 def matriz_ors(coords, api_key):
 
     url = "https://api.openrouteservice.org/v2/matrix/driving-car"
@@ -13,19 +12,15 @@ def matriz_ors(coords, api_key):
 
     locations = []
 
-    # limpiar coordenadas
     for lat, lon in coords:
 
         try:
-            lat = float(lat)
-            lon = float(lon)
+            lat = float(str(lat).replace(",", "."))
+            lon = float(str(lon).replace(",", "."))
         except:
             continue
 
-        if pd.isna(lat) or pd.isna(lon):
-            continue
-
-        locations.append([lon, lat])  # ORS usa [lon, lat]
+        locations.append([lon, lat])
 
     if len(locations) < 2:
         raise Exception("No hay suficientes coordenadas válidas")
@@ -80,6 +75,7 @@ def optimizar_rutas_callejero(input_excel, output_excel, api_key):
         df.to_excel(writer, sheet_name=sheet, index=False)
 
     writer.close()
+
 
 
 
