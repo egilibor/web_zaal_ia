@@ -61,7 +61,7 @@ def optimizar_rutas_callejero(input_excel, output_excel, api_key):
         df = df.dropna(subset=["Latitud", "Longitud"])
 
         if len(df) < 2:
-            raise Exception("No hay suficientes coordenadas validas")
+            raise Exception("No hay suficientes coordenadas v¡alidas")
 
         coords = list(zip(df["Latitud"], df["Longitud"]))
 
@@ -79,6 +79,7 @@ def optimizar_rutas_callejero(input_excel, output_excel, api_key):
         df.to_excel(writer, sheet_name=sheet, index=False)
 
     writer.close()
+
 
 
 
