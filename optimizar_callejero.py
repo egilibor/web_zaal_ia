@@ -11,8 +11,13 @@ def matriz_ors(coords, api_key):
         "Content-Type": "application/json"
     }
 
+    locations = []
+    
+    for lat, lon in coords:
+        locations.append([float(lon), float(lat)])
+    
     body = {
-        "locations": [[lon, lat] for lat, lon in coords]
+        "locations": locations
     }
 
     #r = requests.post(url, json=body, headers=headers)
@@ -64,3 +69,4 @@ def optimizar_rutas_callejero(input_excel, output_excel, api_key):
         df.to_excel(writer, sheet_name=sheet, index=False)
 
     writer.close()
+
