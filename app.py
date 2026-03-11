@@ -273,7 +273,9 @@ with tab3:
         input_path.write_bytes(archivo_excel.getbuffer())
 
         #api_key = st.text_input("API KEY OpenRouteService")
-        api_key = st.secrets["ORS_API_KEY"]
+        #api_key = st.secrets["ORS_API_KEY"]
+        api_key = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImE5YjlmMTkyZGMwNDQ2MDE5NzFlNjAwY2UzZjZlYjYyIiwiaCI6Im11cm11cjY0In0="
+        
         if st.button("Optimizar rutas urbanas", key="fase3_btn"):
 
             try:
@@ -299,6 +301,7 @@ with tab3:
 
             except Exception as e:
                 st.error(f"Error optimizando: {e}")
+
 
 
 
