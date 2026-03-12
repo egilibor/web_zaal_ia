@@ -398,6 +398,7 @@ def load_csv(csv_path: Path) -> pd.DataFrame:
         axis=1
     )
     
+    df["Dirección"] = df["Dirección"].str.upper()    
     df["Parada_key"] = (df["Población"] + "||" + df["Dirección"]).str.strip("|")
     df["Pob_norm"] = df["Población"].apply(norm)
     df["Dir_norm"] = df["Dirección"].apply(norm)
