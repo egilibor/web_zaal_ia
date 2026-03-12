@@ -33,21 +33,42 @@ import pandas as pd
 
 import difflib
 
-# --- Callejero Castellón ---
+# -------------------------
+# Limpieza caracteres Excel
+# -------------------------
+def clean_excel_text(s):
+    if pd.isna(s):
+        return ""
+    s = str(s)
+    return re.sub(r"[\x00-\x1F\x7F]", "", s)
+
+# -------------------------
+# Callejero Castellón
+# -------------------------
 CALLES_CASTELLON = []
 try:
-    _df_calles = pd.read_csv(Path(__file__).parent / "calles_castellon.csv")
-    if "nombre" in _df_calles.columns:
-        CALLES_CASTELLON = _df_calles["nombre"].astype(str).str.upper().unique().tolist()
+    calles_path = Path(__file__).parent / "calles_castellon.csv"
+    if calles_path.exists():
+        _df_calles = pd.read_csv(calles_path)
+        if "nombre" in _df_calles.columns:
+            CALLES_CASTELLON = (
+                _df_calles["nombre"]
+                .astype(str)
+                .str.upper()
+                .unique()
+                .tolist()
+            )
 except Exception:
     CALLES_CASTELLON = []
 
 def corregir_calle_castellon(poblacion: str, direccion: str) -> str:
     if not direccion:
         return direccion
+
     pob = norm(poblacion)
     if "CASTELL" not in pob:
         return direccion
+
     if not CALLES_CASTELLON:
         return direccion
 
@@ -63,6 +84,7 @@ def corregir_calle_castellon(poblacion: str, direccion: str) -> str:
     if match:
         calle = match[0]
         return f"{calle} {direccion}"
+
     return direccion
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -365,13 +387,18 @@ def load_csv(csv_path: Path) -> pd.DataFrame:
         df.loc[df[c].eq(""), c] = f"SIN_{c.upper().replace('.', '')}"
 
     
-    # --- Corrección automática de calles en Castellón ---
-    df["Dirección"] = df.apply(
-        lambda r: corregir_calle_castellon(r["Población"], r["Dirección"]),
-        axis=1
-    )
-    
-    df["Parada_key"] = (df["Población"] + "||" + df["Dirección"]).str.strip("|")
+# limpiar caracteres ilegales Excel
+df["Consignatario"] = df["Consignatario"].apply(clean_excel_text)
+df["Dirección"] = df["Dirección"].apply(clean_excel_text)
+df["Cliente"] = df["Cliente"].apply(clean_excel_text)
+
+# --- Corrección automática de calles en Castellón ---
+df["Dirección"] = df.apply(
+    lambda r: corregir_calle_castellon(r["Población"], r["Dirección"]),
+    axis=1
+)
+
+df["Parada_key"] = (df["Población"] + "||" + df["Dirección"]).str.strip("|")
     df["Pob_norm"] = df["Población"].apply(norm)
     df["Dir_norm"] = df["Dirección"].apply(norm)
     return df
