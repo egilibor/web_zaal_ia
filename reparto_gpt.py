@@ -365,13 +365,13 @@ def load_csv(csv_path: Path) -> pd.DataFrame:
         df.loc[df[c].eq(""), c] = f"SIN_{c.upper().replace('.', '')}"
 
     
-# --- Corrección automática de calles en Castellón ---
-df["Dirección"] = df.apply(
-    lambda r: corregir_calle_castellon(r["Población"], r["Dirección"]),
-    axis=1
-)
-
-df["Parada_key"] = (df["Población"] + "||" + df["Dirección"]).str.strip("|")
+    # --- Corrección automática de calles en Castellón ---
+    df["Dirección"] = df.apply(
+        lambda r: corregir_calle_castellon(r["Población"], r["Dirección"]),
+        axis=1
+    )
+    
+    df["Parada_key"] = (df["Población"] + "||" + df["Dirección"]).str.strip("|")
     df["Pob_norm"] = df["Población"].apply(norm)
     df["Dir_norm"] = df["Dirección"].apply(norm)
     return df
