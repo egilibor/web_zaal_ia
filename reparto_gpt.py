@@ -399,9 +399,9 @@ df["Dirección"] = df.apply(
 )
 
 df["Parada_key"] = (df["Población"] + "||" + df["Dirección"]).str.strip("|")
-    df["Pob_norm"] = df["Población"].apply(norm)
-    df["Dir_norm"] = df["Dirección"].apply(norm)
-    return df
+df["Pob_norm"] = df["Población"].apply(norm)
+df["Dir_norm"] = df["Dirección"].apply(norm)
+return df
 
 def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     df = load_csv(csv_path)
