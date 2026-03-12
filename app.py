@@ -75,8 +75,8 @@ with st.sidebar:
 
 tab1, tab2, tab3 = st.tabs([
     "FASE 1 · Asignación reparto",
-    "FASE 2 · Reordenación topográfica",
-    "FASE 3 · Callejero"
+    "FASE 2 · Reordenación topográfica" #,
+    #"FASE 3 · Callejero"
 ])
 
 # ==========================================================
@@ -301,6 +301,7 @@ with tab3:
 
             except Exception as e:
                 st.error(f"Error optimizando: {e}")
+
 
 
 
