@@ -73,11 +73,18 @@ with st.sidebar:
 # MENÚ HORIZONTAL
 # ==========================================================
 
-tab1, tab2, tab3 = st.tabs([
+tab1, tab2 = st.tabs([
     "FASE 1 · Asignación reparto",
-    "FASE 2 · Reordenación topográfica" #,
-    #"FASE 3 · Callejero"
+    "FASE 2 · Reordenación topográfica"
 ])
+
+
+#tab1, tab2, tab3 = st.tabs([
+#    "FASE 1 · Asignación reparto",
+#    "FASE 2 · Reordenación topográfica",
+#    #"FASE 3 · Callejero"
+#])
+
 
 # ==========================================================
 # FASE 1
@@ -301,6 +308,7 @@ with tab3:
 
             except Exception as e:
                 st.error(f"Error optimizando: {e}")
+
 
 
 
