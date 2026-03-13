@@ -513,10 +513,27 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str) -> None:
     wb_out = Workbook()
     wb_out.remove(wb_out.active)
 
-    add_df_sheet(wb_out, "RESUMEN_GENERAL", overview)
-    add_df_sheet(wb_out, "RESUMEN_UNICO", resumen_unico)
-    add_df_sheet(wb_out, "RESUMEN_RUTAS_RESTO", resto_summary)
-
+    add_df_sheet(
+        wb_out,
+        "RESUMEN_GENERAL",
+        overview,
+        widths=[6, 22, 12, 14, 12, 12],
+    )
+    
+    add_df_sheet(
+        wb_out,
+        "RESUMEN_UNICO",
+        resumen_unico,
+        widths=[8, 28, 10, 14, 12, 12],
+    )
+    
+    add_df_sheet(
+        wb_out,
+        "RESUMEN_RUTAS_RESTO",
+        resto_summary,
+        widths=[6, 18, 10, 14, 12, 12],
+    )
+    
     wb_out.save(out_path)
 
 def main():
