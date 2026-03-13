@@ -11,6 +11,58 @@ from pathlib import Path
 from typing import List
 
 import pandas as pd
+import difflib
+
+# -------------------------
+# CALLEJERO CASTELLÓN
+# -------------------------
+
+CALLES_CASTELLON = []
+
+try:
+    calles_path = Path(__file__).parent / "calles_castellon.csv"
+    if calles_path.exists():
+        df_calles = pd.read_csv(calles_path)
+        if "nombre" in df_calles.columns:
+            CALLES_CASTELLON = (
+                df_calles["nombre"]
+                .astype(str)
+                .str.upper()
+                .unique()
+                .tolist()
+            )
+except Exception:
+    CALLES_CASTELLON = []
+
+
+def corregir_calle_castellon(poblacion: str, direccion: str) -> str:
+
+    if not direccion:
+        return direccion
+
+    pob = norm(poblacion)
+
+    if "CASTELL" not in pob:
+        return direccion
+
+    if not CALLES_CASTELLON:
+        return direccion
+
+    dir_norm = norm(direccion)
+
+    match = difflib.get_close_matches(
+        dir_norm,
+        CALLES_CASTELLON,
+        n=1,
+        cutoff=0.85
+    )
+
+    if match:
+        return match[0]
+
+    return direccion
+
+
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -130,6 +182,14 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
     df["Z.Rep"] = df["Z.Rep"].fillna("")
     df["Cliente"] = df.get("Cliente", "")
 
+    # --- LIMPIEZA DIRECCIONES ---
+    df["Dirección"] = df["Dirección"].apply(clean_text).str.upper()
+    
+    df["Dirección"] = df.apply(
+        lambda r: corregir_calle_castellon(r["Población"], r["Dirección"]),
+        axis=1
+    )    
+    
     # -------------------------
     # APLICAR REGLAS
     # -------------------------
