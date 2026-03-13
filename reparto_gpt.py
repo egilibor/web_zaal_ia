@@ -41,27 +41,37 @@ def corregir_calle_castellon(poblacion: str, direccion: str) -> str:
         return direccion
 
     pob = norm(poblacion)
-
     if "CASTELL" not in pob:
         return direccion
 
     if not CALLES_CASTELLON:
         return direccion
 
-    dir_norm = norm(direccion)
+    # separar número
+    m = re.match(r"(.*?)[,\s]+(\d+.*)", direccion)
+    if m:
+        calle = m.group(1)
+        numero = m.group(2)
+    else:
+        calle = direccion
+        numero = ""
+
+    calle_norm = norm(calle)
 
     match = difflib.get_close_matches(
-        dir_norm,
+        calle_norm,
         CALLES_CASTELLON,
         n=1,
         cutoff=0.85
     )
 
     if match:
-        return match[0]
+        calle = match[0]
 
-    return direccion
+    if numero:
+        return f"{calle} {numero}"
 
+    return calle
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
