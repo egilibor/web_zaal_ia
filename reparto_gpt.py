@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""
+AGENTE CASTELLÓN · SALIDA DIARIA
+(HOSPITALES + FEDERACIÓN + RESTO POR Z.REP)
+
+Versión v3
+
+- Pregunta siempre por el origen de datos
+- Si faltan rutas entra en modo interactivo
+"""
 
 from __future__ import annotations
 
@@ -26,9 +35,9 @@ DEFAULT_REGLAS = str(WORKDIR / "Reglas_hospitales.xlsx")
 DEFAULT_OUT = str(WORKDIR / "salida.xlsx")
 
 
-# -------------------------------------------------------
+# --------------------------------------------------
 # Limpieza Excel
-# -------------------------------------------------------
+# --------------------------------------------------
 
 def clean_excel_text(s):
     if pd.isna(s):
@@ -37,9 +46,9 @@ def clean_excel_text(s):
     return re.sub(r"[\x00-\x1F\x7F]", "", s)
 
 
-# -------------------------------------------------------
+# --------------------------------------------------
 # Callejero Castellón
-# -------------------------------------------------------
+# --------------------------------------------------
 
 CALLES_CASTELLON = []
 
@@ -88,9 +97,9 @@ def corregir_calle_castellon(poblacion: str, direccion: str) -> str:
     return direccion
 
 
-# -------------------------------------------------------
+# --------------------------------------------------
 # Utilidades
-# -------------------------------------------------------
+# --------------------------------------------------
 
 def clean_text(x) -> str:
     if pd.isna(x):
@@ -118,7 +127,7 @@ def parse_kg(x) -> float:
     s = re.sub(r"[^0-9\.\-]", "", s)
 
     try:
-        return float(s) if s != "" else 0.0
+        return float(s) if s else 0.0
     except:
         return 0.0
 
@@ -131,7 +140,7 @@ def parse_int(x) -> int:
     s = re.sub(r"[^0-9\-]", "", str(x))
 
     try:
-        return int(s) if s != "" else 0
+        return int(s) if s else 0
     except:
         return 0
 
@@ -141,13 +150,11 @@ def norm(s: str) -> str:
     s = clean_text(s).upper()
 
     trans = str.maketrans({
-        "Á":"A","É":"E","Í":"I","Ó":"O","Ú":"U","Ü":"U",
-        "Ñ":"N","Ç":"C",
+        "Á":"A","É":"E","Í":"I","Ó":"O","Ú":"U","Ü":"U","Ñ":"N","Ç":"C",
         "À":"A","È":"E","Ì":"I","Ò":"O","Ù":"U"
     })
 
     s = s.translate(trans)
-
     s = re.sub(r"[^\w\s]", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
 
@@ -183,9 +190,9 @@ def pick_col(columns: List[str], candidates: List[str]) -> str | None:
     return None
 
 
-# -------------------------------------------------------
+# --------------------------------------------------
 # Excel helpers
-# -------------------------------------------------------
+# --------------------------------------------------
 
 def style_sheet(ws):
 
@@ -246,20 +253,21 @@ def add_df_sheet(wb, name, df_sheet, widths):
     set_widths(ws, widths)
 
 
-# -------------------------------------------------------
+# --------------------------------------------------
 # Core
-# -------------------------------------------------------
+# --------------------------------------------------
 
-def load_csv(csv_path: Path):
+def load_csv(csv_path: Path) -> pd.DataFrame:
 
-    df_raw = pd.read_csv(csv_path, sep=";", dtype=str)
+    df_raw = pd.read_csv(csv_path, sep=";", encoding="utf-8-sig", dtype=str, engine="python")
 
     cols = list(df_raw.columns)
 
     col_exp = pick_col(cols, ["Exp"])
     col_kg = pick_col(cols, ["Kgs"])
-    col_pop = pick_col(cols, ["Población","Pob_OK"])
-    col_cons = pick_col(cols, ["Consignatario","Cliente","Nombre"])
+    col_pop = pick_col(cols, ["Población", "Pob_OK"])
+    col_cons = pick_col(cols, ["Consignatario", "Cliente", "Nombre"])
+    col_cli = pick_col(cols, ["Cliente"])
     col_dir_ok = pick_col(cols, ["Dir_OK"])
     col_dir_ent = pick_col(cols, ["Dir. entrega"])
     col_zrep = pick_col(cols, ["Z.Rep"])
@@ -270,17 +278,12 @@ def load_csv(csv_path: Path):
 
         "Exp": df_raw[col_exp].apply(clean_text),
         "Kgs": df_raw[col_kg].apply(parse_kg),
-
         "Bultos": df_raw[col_btos].apply(parse_int) if col_btos else 0,
-
         "Consignatario": df_raw[col_cons].apply(clean_text),
-
+        "Cliente": df_raw[col_cli].apply(clean_text) if col_cli else "",
         "Población": df_raw[col_pop].apply(clean_text),
-
-        "Dirección": df_raw[col_dir_ok].apply(clean_text) if col_dir_ok else "",
-
+        "Dirección": (df_raw[col_dir_ok].apply(clean_text) if col_dir_ok else ""),
         "Z.Rep": df_raw[col_zrep].apply(clean_text) if col_zrep else "SIN_ZONA",
-
         "N_servicio": df_raw[col_serv].apply(clean_text) if col_serv else "",
     })
 
@@ -290,6 +293,10 @@ def load_csv(csv_path: Path):
 
         df.loc[df["Dirección"].eq(""), "Dirección"] = fb[df["Dirección"].eq("")]
 
+    df["Consignatario"] = df["Consignatario"].apply(clean_excel_text)
+    df["Dirección"] = df["Dirección"].apply(clean_excel_text)
+    df["Cliente"] = df["Cliente"].apply(clean_excel_text)
+
     df["Dirección"] = df.apply(
         lambda r: corregir_calle_castellon(r["Población"], r["Dirección"]),
         axis=1
@@ -297,9 +304,7 @@ def load_csv(csv_path: Path):
 
     df["Dirección"] = df["Dirección"].str.upper()
 
-    df["Parada_key"] = (
-        df["Población"] + "||" + df["Dirección"]
-    )
+    df["Parada_key"] = (df["Población"] + "||" + df["Dirección"]).str.strip("|")
 
     df["Pob_norm"] = df["Población"].apply(norm)
     df["Dir_norm"] = df["Dirección"].apply(norm)
@@ -307,7 +312,7 @@ def load_csv(csv_path: Path):
     return df
 
 
-def run(csv_path, reglas_path, out_path, origen):
+def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str):
 
     df = load_csv(csv_path)
 
@@ -339,33 +344,27 @@ def run(csv_path, reglas_path, out_path, origen):
     )
 
     overview = pd.DataFrame({
-
         "Bloque":["HOSPITALES","FEDERACION","RESTO"],
-
         "Paradas":[
             hosp["Parada_key"].nunique(),
             fed["Parada_key"].nunique(),
             resto_grp["Parada_key"].nunique()
         ],
-
         "Expediciones":[
             hosp["Exp"].nunique(),
             fed["Exp"].nunique(),
             resto["Exp"].nunique()
         ],
-
         "Bultos":[
             hosp["Bultos"].sum(),
             fed["Bultos"].sum(),
             resto["Bultos"].sum()
         ],
-
         "Kilos":[
             hosp["Kgs"].sum(),
             fed["Kgs"].sum(),
             resto["Kgs"].sum()
         ]
-
     })
 
     resumen_unico_general = overview.copy()
@@ -384,7 +383,7 @@ def run(csv_path, reglas_path, out_path, origen):
     wb = Workbook()
     wb.remove(wb.active)
 
-    add_df_sheet(wb,"RESUMEN_GENERAL",overview,[20,12,14,12,12])
+    add_df_sheet(wb,"RESUMEN_GENERAL",overview,[22,10,12,12,12])
     add_df_sheet(wb,"RESUMEN_UNICO",resumen_unico,[10,25,10,12,12,12])
     add_df_sheet(wb,"RESUMEN_RUTAS_RESTO",resto_summary,[15,10,12,12,12])
 
@@ -393,8 +392,13 @@ def run(csv_path, reglas_path, out_path, origen):
 
 def main():
 
-    parser = argparse.ArgumentParser()
+    try:
+        if WORKDIR.exists():
+            os.chdir(WORKDIR)
+    except:
+        pass
 
+    parser = argparse.ArgumentParser()
     parser.add_argument("--csv")
     parser.add_argument("--reglas")
     parser.add_argument("--out")
@@ -405,7 +409,9 @@ def main():
     reglas_p = Path(args.reglas) if args.reglas else Path(DEFAULT_REGLAS)
     out_p = Path(args.out) if args.out else Path(DEFAULT_OUT)
 
-    run(csv_p, reglas_p, out_p, "LLEGADAS")
+    origen = "LLEGADAS"
+
+    run(csv_p, reglas_p, out_p, origen)
 
     print("OK generado:", out_p)
 
