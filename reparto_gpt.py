@@ -409,7 +409,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str):
         widths=[6, 18, 10, 14, 12, 12],
     )    
 
-    wb.save(out_path)
+    wb_out.save(out_path)
 
 
 def main():
