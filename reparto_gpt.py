@@ -385,9 +385,9 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str):
     ]
 
 
-    wb = Workbook()
-    wb.remove(wb.active)
-
+    wb_out = Workbook()
+    wb_out.remove(wb_out.active)
+    
     add_df_sheet(
         wb_out,
         "RESUMEN_GENERAL",
