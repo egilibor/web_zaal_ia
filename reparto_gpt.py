@@ -40,14 +40,13 @@ def corregir_calle_castellon(poblacion: str, direccion: str) -> str:
     if not direccion:
         return direccion
 
-    pob = norm(poblacion)
-    if "CASTELL" not in pob:
+    if "CASTELL" not in norm(poblacion):
         return direccion
 
     if not CALLES_CASTELLON:
         return direccion
 
-    # separar número
+    # separar calle y número
     m = re.match(r"(.*?)[,\s]+(\d+.*)", direccion)
     if m:
         calle = m.group(1)
@@ -58,15 +57,18 @@ def corregir_calle_castellon(poblacion: str, direccion: str) -> str:
 
     calle_norm = norm(calle)
 
+    # crear mapa normalizado → original
+    mapa = {norm(c): c for c in CALLES_CASTELLON}
+
     match = difflib.get_close_matches(
         calle_norm,
-        CALLES_CASTELLON,
+        list(mapa.keys()),
         n=1,
         cutoff=0.85
     )
 
     if match:
-        calle = match[0]
+        calle = mapa[match[0]]
 
     if numero:
         return f"{calle} {numero}"
