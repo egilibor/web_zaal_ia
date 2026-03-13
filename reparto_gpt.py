@@ -368,24 +368,46 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str):
     })
 
     resumen_unico_general = overview.copy()
-    resumen_unico_general.insert(0,"Tipo","GENERAL")
-    resumen_unico_general = resumen_unico_general.rename(columns={"Bloque":"Clave"})
-
+    resumen_unico_general.insert(0, "Tipo", "GENERAL")
+    resumen_unico_general = resumen_unico_general.rename(columns={"Bloque": "Clave"})
+    
     resumen_unico_resto = resto_summary.copy()
-    resumen_unico_resto.insert(0,"Tipo","RESTO")
-    resumen_unico_resto = resumen_unico_resto.rename(columns={"Z.Rep":"Clave"})
-
+    resumen_unico_resto.insert(0, "Tipo", "RESTO")
+    resumen_unico_resto = resumen_unico_resto.rename(columns={"Z.Rep": "Clave"})
+    
     resumen_unico = pd.concat(
-        [resumen_unico_general,resumen_unico_resto],
+        [resumen_unico_general, resumen_unico_resto],
         ignore_index=True
     )
+    
+    resumen_unico = resumen_unico[
+        ["Tipo", "Clave", "Paradas", "Expediciones", "Bultos", "Kilos"]
+    ]
+
 
     wb = Workbook()
     wb.remove(wb.active)
 
-    add_df_sheet(wb,"RESUMEN_GENERAL",overview,[22,10,12,12,12])
-    add_df_sheet(wb,"RESUMEN_UNICO",resumen_unico,[10,25,10,12,12,12])
-    add_df_sheet(wb,"RESUMEN_RUTAS_RESTO",resto_summary,[15,10,12,12,12])
+    add_df_sheet(
+        wb_out,
+        "RESUMEN_GENERAL",
+        overview,
+        widths=[6, 22, 12, 14, 12],
+    )
+    
+    add_df_sheet(
+        wb_out,
+        "RESUMEN_UNICO",
+        resumen_unico,
+        widths=[8, 28, 10, 14, 12, 12],
+    )
+    
+    add_df_sheet(
+        wb_out,
+        "RESUMEN_RUTAS_RESTO",
+        resto_summary,
+        widths=[6, 18, 10, 14, 12, 12],
+    )    
 
     wb.save(out_path)
 
