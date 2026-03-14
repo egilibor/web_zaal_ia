@@ -13,6 +13,68 @@ from typing import List
 import pandas as pd
 import difflib
 
+# -------------------------
+# CALLEJERO CASTELLÓN
+# -------------------------
+
+CALLES_CASTELLON = []
+
+try:
+    calles_path = Path(__file__).parent / "calles_castellon.csv"
+    if calles_path.exists():
+        df_calles = pd.read_csv(calles_path)
+        if "nombre" in df_calles.columns:
+            CALLES_CASTELLON = (
+                df_calles["nombre"]
+                .astype(str)
+                .str.upper()
+                .unique()
+                .tolist()
+            )
+except Exception:
+    CALLES_CASTELLON = []
+
+
+def corregir_calle_castellon(poblacion: str, direccion: str) -> str:
+
+    if not direccion:
+        return direccion
+
+    if "CASTELL" not in norm(poblacion):
+        return direccion
+
+    if not CALLES_CASTELLON:
+        return direccion
+
+    # separar calle y número
+    m = re.match(r"(.*?)[,\s]+(\d+.*)", direccion)
+    if m:
+        calle = m.group(1)
+        numero = m.group(2)
+    else:
+        calle = direccion
+        numero = ""
+
+    calle_norm = norm(calle)
+
+    # crear mapa normalizado → original
+    mapa = {norm(c): c for c in CALLES_CASTELLON}
+
+    match = difflib.get_close_matches(
+        calle_norm,
+        list(mapa.keys()),
+        n=1,
+        cutoff=0.85
+    )
+
+    if match:
+        calle = mapa[match[0]]
+
+    if numero:
+        return f"{calle} {numero}"
+
+    return calle
+
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -61,12 +123,6 @@ def norm(s: str) -> str:
     return s
 
 
-def direccion_sin_numero(dir_txt: str) -> str:
-    if not dir_txt:
-        return ""
-    return re.sub(r"\s+\d+.*$", "", dir_txt).strip()
-
-
 def sheet_to_df(wb, name: str) -> pd.DataFrame:
     if name not in wb.sheetnames:
         return pd.DataFrame()
@@ -100,37 +156,18 @@ def match_rules(pob_norm: str, dir_norm: str, rules_df: pd.DataFrame, tag_field:
     return False, ""
 
 
-# -------------------------
-# ESTILO
-# -------------------------
-
-def style_sheet(ws, parada_col=None):
-
+def style_sheet(ws):
     thin = Side(style="thin")
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
     header_font = Font(bold=True)
-
-    gris = PatternFill(start_color="00EEEEEE", end_color="00EEEEEE", fill_type="solid")
 
     for cell in ws[1]:
         cell.font = header_font
         cell.border = border
 
-    ultima_parada = None
-    toggle = False
-
     for row in ws.iter_rows(min_row=2):
-
-        if parada_col is not None:
-            parada = row[parada_col].value
-            if parada != ultima_parada:
-                toggle = not toggle
-                ultima_parada = parada
-
         for cell in row:
             cell.border = border
-            if parada_col is not None and toggle:
-                cell.fill = gris
 
     ws.freeze_panes = "A2"
 
@@ -159,14 +196,12 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
 
     # --- LIMPIEZA DIRECCIONES ---
     df["Dirección"] = df["Dirección"].apply(clean_text).str.upper()
-
-    # -------------------------
-    # CLAVE DE PARADA
-    # -------------------------
-
-    df["CALLE_BASE"] = df["Dirección"].apply(direccion_sin_numero)
-    df["PARADA"] = df["Población"].apply(norm) + "|" + df["CALLE_BASE"].apply(norm)
-
+    
+    df["Dirección"] = df.apply(
+        lambda r: corregir_calle_castellon(r["Población"], r["Dirección"]),
+        axis=1
+    )    
+    
     # -------------------------
     # APLICAR REGLAS
     # -------------------------
@@ -201,41 +236,13 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
     hosp = df[df["is_hospital"]].copy()
     fed = df[df["is_fed"]].copy()
     resto = df[~df["is_any_special"]].copy()
-
     resto["Z.Rep"] = (
         resto["Z.Rep"]
         .astype(str)
         .str.strip()
         .replace(".", "")
     )
-
-    # -------------------------
-    # RESUMEN_UNICO
-    # -------------------------
-
-    resumen = []
-
-    resumen.append({
-        "Ruta": "HOSPITALES",
-        "Expediciones": len(hosp),
-        "Paradas": hosp["PARADA"].nunique()
-    })
-
-    resumen.append({
-        "Ruta": "FEDERACION",
-        "Expediciones": len(fed),
-        "Paradas": fed["PARADA"].nunique()
-    })
-
-    for z, sub in resto.groupby("Z.Rep"):
-        resumen.append({
-            "Ruta": f"ZREP_{z}",
-            "Expediciones": len(sub),
-            "Paradas": sub["PARADA"].nunique()
-        })
-
-    resumen_df = pd.DataFrame(resumen)
-
+    
     # -------------------------
     # EXCEL
     # -------------------------
@@ -249,30 +256,33 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
         "Bultos", "Z.Rep", "N. servicio"
     ]
 
-    # RESUMEN
-    ws_res = wb_out.create_sheet("RESUMEN_UNICO")
+    # METADATOS
+    meta = pd.DataFrame({
+        "Clave": ["Delegación", "Origen de datos", "CSV", "Reglas", "Generado"],
+        "Valor": [
+            delegacion,
+            origen,
+            str(csv_path),
+            str(reglas_path),
+            _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        ],
+    })
 
-    for row in dataframe_to_rows(resumen_df, index=False, header=True):
-        ws_res.append(row)
-
-    style_sheet(ws_res)
+    ws_meta = wb_out.create_sheet("METADATOS")
+    for row in dataframe_to_rows(meta, index=False, header=True):
+        ws_meta.append(row)
+    style_sheet(ws_meta)
 
     # HOSPITALES
-    hosp = hosp.sort_values("PARADA")
-
     ws_h = wb_out.create_sheet("HOSPITALES")
     for row in dataframe_to_rows(hosp[COLUMNAS_BASE], index=False, header=True):
         ws_h.append(row)
-
     style_sheet(ws_h)
 
     # FEDERACION
-    fed = fed.sort_values("PARADA")
-
     ws_f = wb_out.create_sheet("FEDERACION")
     for row in dataframe_to_rows(fed[COLUMNAS_BASE], index=False, header=True):
         ws_f.append(row)
-
     style_sheet(ws_f)
 
     # ZREP
@@ -280,9 +290,9 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
 
     for z, sub in resto.groupby("Z.Rep"):
 
-        sub = sub.sort_values("PARADA")
-
         z = str(z).strip()
+        if z == ".":
+            z = ""
 
         nombre = f"ZREP_{z}"
         nombre = re.sub(r"[\\/*?:\[\]]", "_", nombre)[:31]
