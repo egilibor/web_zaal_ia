@@ -13,6 +13,12 @@ from typing import List
 import pandas as pd
 import difflib
 
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
+from openpyxl.utils.dataframe import dataframe_to_rows
+
+
 # -------------------------
 # CALLEJERO CASTELLÓN
 # -------------------------
@@ -35,6 +41,19 @@ except Exception:
     CALLES_CASTELLON = []
 
 
+def norm(s: str) -> str:
+    if not isinstance(s, str):
+        return ""
+    s = s.strip().upper()
+    trans = str.maketrans({
+        "Á":"A","É":"E","Í":"I","Ó":"O","Ú":"U","Ü":"U","Ñ":"N","Ç":"C",
+    })
+    s = s.translate(trans)
+    s = re.sub(r"[^\w\s]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
 def corregir_calle_castellon(poblacion: str, direccion: str) -> str:
 
     if not direccion:
@@ -46,7 +65,6 @@ def corregir_calle_castellon(poblacion: str, direccion: str) -> str:
     if not CALLES_CASTELLON:
         return direccion
 
-    # separar calle y número
     m = re.match(r"(.*?)[,\s]+(\d+.*)", direccion)
     if m:
         calle = m.group(1)
@@ -56,8 +74,6 @@ def corregir_calle_castellon(poblacion: str, direccion: str) -> str:
         numero = ""
 
     calle_norm = norm(calle)
-
-    # crear mapa normalizado → original
     mapa = {norm(c): c for c in CALLES_CASTELLON}
 
     match = difflib.get_close_matches(
@@ -74,11 +90,6 @@ def corregir_calle_castellon(poblacion: str, direccion: str) -> str:
         return f"{calle} {numero}"
 
     return calle
-
-from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from openpyxl.utils import get_column_letter
-from openpyxl.utils.dataframe import dataframe_to_rows
 
 
 # -------------------------
@@ -110,17 +121,6 @@ def parse_int(x) -> int:
         return int(s)
     except:
         return 0
-
-
-def norm(s: str) -> str:
-    s = clean_text(s).upper()
-    trans = str.maketrans({
-        "Á":"A","É":"E","Í":"I","Ó":"O","Ú":"U","Ü":"U","Ñ":"N","Ç":"C",
-    })
-    s = s.translate(trans)
-    s = re.sub(r"[^\w\s]", " ", s)
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
 
 
 def sheet_to_df(wb, name: str) -> pd.DataFrame:
@@ -194,33 +194,22 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
     df["Z.Rep"] = df["Z.Rep"].fillna("")
     df["Cliente"] = df.get("Cliente", "")
 
-    # --- LIMPIEZA DIRECCIONES ---
     df["Dirección"] = df["Dirección"].apply(clean_text).str.upper()
-    
+
     df["Dirección"] = df.apply(
         lambda r: corregir_calle_castellon(r["Población"], r["Dirección"]),
         axis=1
-    ) 
-    
-    # -------------------------
-    # CALLE SIN NÚMERO
-    # -------------------------
+    )
+
+    # CALLE SIN NUMERO
     df["CALLE"] = (
         df["Dirección"]
         .str.replace(r"\s*,?\s*\d+.*$", "", regex=True)
         .str.strip()
     )
-    
-    # CLAVE DE PARADA
-    df["PARADA"] = (
-        df["Población"].str.upper().str.strip() +
-        " | " +
-        df["CALLE"]
-    )    
-    
-    # -------------------------
-    # APLICAR REGLAS
-    # -------------------------
+
+    # PARADA = POBLACION + CALLE
+    df["PARADA"] = df["Población"].str.upper().str.strip() + " | " + df["CALLE"]
 
     df["Pob_norm"] = df["Población"].apply(norm)
     df["Dir_norm"] = df["Dirección"].apply(norm)
@@ -252,9 +241,8 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
     hosp = df[df["is_hospital"]].copy()
     fed = df[df["is_fed"]].copy()
     resto = df[~df["is_any_special"]].copy()
-    # -------------------------
+
     # PARADAS REALES
-    # -------------------------
     paradas = (
         resto.groupby(["Z.Rep", "PARADA"])
         .agg(
@@ -265,17 +253,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
             Kilos=("Kgs", "sum"),
         )
         .reset_index()
-    )   
-    resto["Z.Rep"] = (
-        resto["Z.Rep"]
-        .astype(str)
-        .str.strip()
-        .replace(".", "")
     )
-    
-    # -------------------------
-    # EXCEL
-    # -------------------------
 
     wb_out = Workbook()
     wb_out.remove(wb_out.active)
@@ -286,43 +264,24 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
         "Bultos", "Z.Rep", "N. servicio"
     ]
 
-    # METADATOS
-    meta = pd.DataFrame({
-        "Clave": ["Delegación", "Origen de datos", "CSV", "Reglas", "Generado"],
-        "Valor": [
-            delegacion,
-            origen,
-            str(csv_path),
-            str(reglas_path),
-            _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        ],
-    })
-
-    ws_meta = wb_out.create_sheet("METADATOS")
-    for row in dataframe_to_rows(meta, index=False, header=True):
-        ws_meta.append(row)
-    style_sheet(ws_meta)
-
-    # HOSPITALES
     ws_h = wb_out.create_sheet("HOSPITALES")
     for row in dataframe_to_rows(hosp[COLUMNAS_BASE], index=False, header=True):
         ws_h.append(row)
     style_sheet(ws_h)
 
-    # FEDERACION
     ws_f = wb_out.create_sheet("FEDERACION")
     for row in dataframe_to_rows(fed[COLUMNAS_BASE], index=False, header=True):
         ws_f.append(row)
     style_sheet(ws_f)
 
-    # ZREP
+    ws_p = wb_out.create_sheet("PARADAS")
+    for row in dataframe_to_rows(paradas, index=False, header=True):
+        ws_p.append(row)
+    style_sheet(ws_p)
+
     existing = set(wb_out.sheetnames)
 
     for z, sub in resto.groupby("Z.Rep"):
-
-        z = str(z).strip()
-        if z == ".":
-            z = ""
 
         nombre = f"ZREP_{z}"
         nombre = re.sub(r"[\\/*?:\[\]]", "_", nombre)[:31]
@@ -343,20 +302,9 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
 
         style_sheet(ws)
 
-    ws_p = wb_out.create_sheet("PARADAS")
-    
-    for row in dataframe_to_rows(paradas, index=False, header=True):
-        ws_p.append(row)
-    
-    style_sheet(ws_p)
-    
     out_path.parent.mkdir(parents=True, exist_ok=True)
     wb_out.save(out_path)
 
-
-# -------------------------
-# MAIN
-# -------------------------
 
 def main():
     parser = argparse.ArgumentParser()
