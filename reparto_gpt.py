@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import List
 
 import pandas as pd
+import difflib
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -125,8 +126,6 @@ def style_sheet(ws, parada_col=None):
             if parada != ultima_parada:
                 toggle = not toggle
                 ultima_parada = parada
-        else:
-            parada = None
 
         for cell in row:
             cell.border = border
@@ -158,21 +157,22 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
     df["Z.Rep"] = df["Z.Rep"].fillna("")
     df["Cliente"] = df.get("Cliente", "")
 
+    # --- LIMPIEZA DIRECCIONES ---
     df["Dirección"] = df["Dirección"].apply(clean_text).str.upper()
 
-    df["Pob_norm"] = df["Población"].apply(norm)
-    df["Dir_norm"] = df["Dirección"].apply(norm)
-
     # -------------------------
-    # PARADAS
+    # CLAVE DE PARADA
     # -------------------------
 
     df["CALLE_BASE"] = df["Dirección"].apply(direccion_sin_numero)
     df["PARADA"] = df["Población"].apply(norm) + "|" + df["CALLE_BASE"].apply(norm)
 
     # -------------------------
-    # REGLAS
+    # APLICAR REGLAS
     # -------------------------
+
+    df["Pob_norm"] = df["Población"].apply(norm)
+    df["Dir_norm"] = df["Dirección"].apply(norm)
 
     wb_rules = load_workbook(reglas_path, data_only=True)
     rules_h = sheet_to_df(wb_rules, "REGLAS_HOSPITALES")
@@ -210,7 +210,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
     )
 
     # -------------------------
-    # RESUMEN
+    # RESUMEN_UNICO
     # -------------------------
 
     resumen = []
@@ -249,29 +249,31 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
         "Bultos", "Z.Rep", "N. servicio"
     ]
 
-    # RESUMEN_UNICO
+    # RESUMEN
     ws_res = wb_out.create_sheet("RESUMEN_UNICO")
+
     for row in dataframe_to_rows(resumen_df, index=False, header=True):
         ws_res.append(row)
+
     style_sheet(ws_res)
 
     # HOSPITALES
     hosp = hosp.sort_values("PARADA")
-    ws_h = wb_out.create_sheet("HOSPITALES")
 
-    for row in dataframe_to_rows(hosp[COLUMNAS_BASE + ["PARADA"]], index=False, header=True):
+    ws_h = wb_out.create_sheet("HOSPITALES")
+    for row in dataframe_to_rows(hosp[COLUMNAS_BASE], index=False, header=True):
         ws_h.append(row)
 
-    style_sheet(ws_h, parada_col=len(COLUMNAS_BASE))
+    style_sheet(ws_h)
 
     # FEDERACION
     fed = fed.sort_values("PARADA")
-    ws_f = wb_out.create_sheet("FEDERACION")
 
-    for row in dataframe_to_rows(fed[COLUMNAS_BASE + ["PARADA"]], index=False, header=True):
+    ws_f = wb_out.create_sheet("FEDERACION")
+    for row in dataframe_to_rows(fed[COLUMNAS_BASE], index=False, header=True):
         ws_f.append(row)
 
-    style_sheet(ws_f, parada_col=len(COLUMNAS_BASE))
+    style_sheet(ws_f)
 
     # ZREP
     existing = set(wb_out.sheetnames)
@@ -280,15 +282,26 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
 
         sub = sub.sort_values("PARADA")
 
+        z = str(z).strip()
+
         nombre = f"ZREP_{z}"
         nombre = re.sub(r"[\\/*?:\[\]]", "_", nombre)[:31]
 
+        base = nombre
+        i = 1
+        while nombre in existing:
+            sufijo = f"_{i}"
+            nombre = (base[:31 - len(sufijo)] + sufijo)
+            i += 1
+
+        existing.add(nombre)
+
         ws = wb_out.create_sheet(nombre)
 
-        for row in dataframe_to_rows(sub[COLUMNAS_BASE + ["PARADA"]], index=False, header=True):
+        for row in dataframe_to_rows(sub[COLUMNAS_BASE], index=False, header=True):
             ws.append(row)
 
-        style_sheet(ws, parada_col=len(COLUMNAS_BASE))
+        style_sheet(ws)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     wb_out.save(out_path)
