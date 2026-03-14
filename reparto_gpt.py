@@ -11,85 +11,11 @@ from pathlib import Path
 from typing import List
 
 import pandas as pd
-import difflib
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.dataframe import dataframe_to_rows
-
-
-# -------------------------
-# CALLEJERO CASTELLÓN
-# -------------------------
-
-CALLES_CASTELLON = []
-
-try:
-    calles_path = Path(__file__).parent / "calles_castellon.csv"
-    if calles_path.exists():
-        df_calles = pd.read_csv(calles_path)
-        if "nombre" in df_calles.columns:
-            CALLES_CASTELLON = (
-                df_calles["nombre"]
-                .astype(str)
-                .str.upper()
-                .unique()
-                .tolist()
-            )
-except Exception:
-    CALLES_CASTELLON = []
-
-
-def norm(s: str) -> str:
-    if not isinstance(s, str):
-        return ""
-    s = s.strip().upper()
-    trans = str.maketrans({
-        "Á":"A","É":"E","Í":"I","Ó":"O","Ú":"U","Ü":"U","Ñ":"N","Ç":"C",
-    })
-    s = s.translate(trans)
-    s = re.sub(r"[^\w\s]", " ", s)
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
-
-
-def corregir_calle_castellon(poblacion: str, direccion: str) -> str:
-
-    if not direccion:
-        return direccion
-
-    if "CASTELL" not in norm(poblacion):
-        return direccion
-
-    if not CALLES_CASTELLON:
-        return direccion
-
-    m = re.match(r"(.*?)[,\s]+(\d+.*)", direccion)
-    if m:
-        calle = m.group(1)
-        numero = m.group(2)
-    else:
-        calle = direccion
-        numero = ""
-
-    calle_norm = norm(calle)
-    mapa = {norm(c): c for c in CALLES_CASTELLON}
-
-    match = difflib.get_close_matches(
-        calle_norm,
-        list(mapa.keys()),
-        n=1,
-        cutoff=0.85
-    )
-
-    if match:
-        calle = mapa[match[0]]
-
-    if numero:
-        return f"{calle} {numero}"
-
-    return calle
 
 
 # -------------------------
@@ -121,6 +47,23 @@ def parse_int(x) -> int:
         return int(s)
     except:
         return 0
+
+
+def norm(s: str) -> str:
+    s = clean_text(s).upper()
+    trans = str.maketrans({
+        "Á":"A","É":"E","Í":"I","Ó":"O","Ú":"U","Ü":"U","Ñ":"N","Ç":"C",
+    })
+    s = s.translate(trans)
+    s = re.sub(r"[^\w\s]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+def direccion_sin_numero(dir_txt: str) -> str:
+    if not dir_txt:
+        return ""
+    return re.sub(r"\s+\d+.*$", "", dir_txt).strip()
 
 
 def sheet_to_df(wb, name: str) -> pd.DataFrame:
@@ -156,18 +99,39 @@ def match_rules(pob_norm: str, dir_norm: str, rules_df: pd.DataFrame, tag_field:
     return False, ""
 
 
-def style_sheet(ws):
+# -------------------------
+# ESTILO
+# -------------------------
+
+def style_sheet(ws, parada_col=None):
+
     thin = Side(style="thin")
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
     header_font = Font(bold=True)
+
+    gris = PatternFill(start_color="00EEEEEE", end_color="00EEEEEE", fill_type="solid")
 
     for cell in ws[1]:
         cell.font = header_font
         cell.border = border
 
+    ultima_parada = None
+    toggle = False
+
     for row in ws.iter_rows(min_row=2):
+
+        if parada_col is not None:
+            parada = row[parada_col].value
+            if parada != ultima_parada:
+                toggle = not toggle
+                ultima_parada = parada
+        else:
+            parada = None
+
         for cell in row:
             cell.border = border
+            if parada_col is not None and toggle:
+                cell.fill = gris
 
     ws.freeze_panes = "A2"
 
@@ -196,23 +160,19 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
 
     df["Dirección"] = df["Dirección"].apply(clean_text).str.upper()
 
-    df["Dirección"] = df.apply(
-        lambda r: corregir_calle_castellon(r["Población"], r["Dirección"]),
-        axis=1
-    )
-
-    # CALLE SIN NUMERO
-    df["CALLE"] = (
-        df["Dirección"]
-        .str.replace(r"\s*,?\s*\d+.*$", "", regex=True)
-        .str.strip()
-    )
-
-    # PARADA = POBLACION + CALLE
-    df["PARADA"] = df["Población"].str.upper().str.strip() + " | " + df["CALLE"]
-
     df["Pob_norm"] = df["Población"].apply(norm)
     df["Dir_norm"] = df["Dirección"].apply(norm)
+
+    # -------------------------
+    # PARADAS
+    # -------------------------
+
+    df["CALLE_BASE"] = df["Dirección"].apply(direccion_sin_numero)
+    df["PARADA"] = df["Población"].apply(norm) + "|" + df["CALLE_BASE"].apply(norm)
+
+    # -------------------------
+    # REGLAS
+    # -------------------------
 
     wb_rules = load_workbook(reglas_path, data_only=True)
     rules_h = sheet_to_df(wb_rules, "REGLAS_HOSPITALES")
@@ -242,18 +202,43 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
     fed = df[df["is_fed"]].copy()
     resto = df[~df["is_any_special"]].copy()
 
-    # PARADAS REALES
-    paradas = (
-        resto.groupby(["Z.Rep", "PARADA"])
-        .agg(
-            Población=("Población", "first"),
-            Calle=("CALLE", "first"),
-            Expediciones=("Exp", "count"),
-            Bultos=("Bultos", "sum"),
-            Kilos=("Kgs", "sum"),
-        )
-        .reset_index()
+    resto["Z.Rep"] = (
+        resto["Z.Rep"]
+        .astype(str)
+        .str.strip()
+        .replace(".", "")
     )
+
+    # -------------------------
+    # RESUMEN
+    # -------------------------
+
+    resumen = []
+
+    resumen.append({
+        "Ruta": "HOSPITALES",
+        "Expediciones": len(hosp),
+        "Paradas": hosp["PARADA"].nunique()
+    })
+
+    resumen.append({
+        "Ruta": "FEDERACION",
+        "Expediciones": len(fed),
+        "Paradas": fed["PARADA"].nunique()
+    })
+
+    for z, sub in resto.groupby("Z.Rep"):
+        resumen.append({
+            "Ruta": f"ZREP_{z}",
+            "Expediciones": len(sub),
+            "Paradas": sub["PARADA"].nunique()
+        })
+
+    resumen_df = pd.DataFrame(resumen)
+
+    # -------------------------
+    # EXCEL
+    # -------------------------
 
     wb_out = Workbook()
     wb_out.remove(wb_out.active)
@@ -264,47 +249,54 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
         "Bultos", "Z.Rep", "N. servicio"
     ]
 
+    # RESUMEN_UNICO
+    ws_res = wb_out.create_sheet("RESUMEN_UNICO")
+    for row in dataframe_to_rows(resumen_df, index=False, header=True):
+        ws_res.append(row)
+    style_sheet(ws_res)
+
+    # HOSPITALES
+    hosp = hosp.sort_values("PARADA")
     ws_h = wb_out.create_sheet("HOSPITALES")
-    for row in dataframe_to_rows(hosp[COLUMNAS_BASE], index=False, header=True):
+
+    for row in dataframe_to_rows(hosp[COLUMNAS_BASE + ["PARADA"]], index=False, header=True):
         ws_h.append(row)
-    style_sheet(ws_h)
 
+    style_sheet(ws_h, parada_col=len(COLUMNAS_BASE))
+
+    # FEDERACION
+    fed = fed.sort_values("PARADA")
     ws_f = wb_out.create_sheet("FEDERACION")
-    for row in dataframe_to_rows(fed[COLUMNAS_BASE], index=False, header=True):
+
+    for row in dataframe_to_rows(fed[COLUMNAS_BASE + ["PARADA"]], index=False, header=True):
         ws_f.append(row)
-    style_sheet(ws_f)
 
-    ws_p = wb_out.create_sheet("PARADAS")
-    for row in dataframe_to_rows(paradas, index=False, header=True):
-        ws_p.append(row)
-    style_sheet(ws_p)
+    style_sheet(ws_f, parada_col=len(COLUMNAS_BASE))
 
+    # ZREP
     existing = set(wb_out.sheetnames)
 
     for z, sub in resto.groupby("Z.Rep"):
 
+        sub = sub.sort_values("PARADA")
+
         nombre = f"ZREP_{z}"
         nombre = re.sub(r"[\\/*?:\[\]]", "_", nombre)[:31]
 
-        base = nombre
-        i = 1
-        while nombre in existing:
-            sufijo = f"_{i}"
-            nombre = (base[:31 - len(sufijo)] + sufijo)
-            i += 1
-
-        existing.add(nombre)
-
         ws = wb_out.create_sheet(nombre)
 
-        for row in dataframe_to_rows(sub[COLUMNAS_BASE], index=False, header=True):
+        for row in dataframe_to_rows(sub[COLUMNAS_BASE + ["PARADA"]], index=False, header=True):
             ws.append(row)
 
-        style_sheet(ws)
+        style_sheet(ws, parada_col=len(COLUMNAS_BASE))
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     wb_out.save(out_path)
 
+
+# -------------------------
+# MAIN
+# -------------------------
 
 def main():
     parser = argparse.ArgumentParser()
