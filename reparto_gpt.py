@@ -191,6 +191,13 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
     df["Bultos"] = df["Btos."].apply(parse_int)
     df["Población"] = df["Población"].fillna("")
     df["Dirección"] = df["Dir_OK"].fillna("")
+    # -------------------------
+    # PARADA REAL
+    # -------------------------
+    df["PARADA"] = (
+        df["Población"].str.upper().str.strip() + " | " +
+        df["Dirección"].str.upper().str.strip()
+    )
     df["Z.Rep"] = df["Z.Rep"].fillna("")
     df["Cliente"] = df.get("Cliente", "")
 
@@ -242,6 +249,20 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
         .str.strip()
         .replace(".", "")
     )
+    # -------------------------
+    # PARADAS REALES RESTO
+    # -------------------------
+    resto_paradas = (
+        resto.groupby(["Z.Rep", "PARADA"])
+        .agg(
+            Población=("Población", "first"),
+            Dirección=("Dirección", "first"),
+            Expediciones=("Exp", "count"),
+            Bultos=("Bultos", "sum"),
+            Kilos=("Kgs", "sum"),
+        )
+        .reset_index()
+)    
     
     # -------------------------
     # EXCEL
@@ -284,6 +305,14 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
     for row in dataframe_to_rows(fed[COLUMNAS_BASE], index=False, header=True):
         ws_f.append(row)
     style_sheet(ws_f)
+
+    # PARADAS REALES
+    ws_p = wb_out.create_sheet("PARADAS_REALES")
+    
+    for row in dataframe_to_rows(resto_paradas, index=False, header=True):
+        ws_p.append(row)
+    
+    style_sheet(ws_p)
 
     # ZREP
     existing = set(wb_out.sheetnames)
