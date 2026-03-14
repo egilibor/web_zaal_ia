@@ -191,13 +191,6 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
     df["Bultos"] = df["Btos."].apply(parse_int)
     df["Población"] = df["Población"].fillna("")
     df["Dirección"] = df["Dir_OK"].fillna("")
-    # -------------------------
-    # PARADA REAL
-    # -------------------------
-    df["PARADA"] = (
-        df["Población"].str.upper().str.strip() + " | " +
-        df["Dirección"].str.upper().str.strip()
-    )
     df["Z.Rep"] = df["Z.Rep"].fillna("")
     df["Cliente"] = df.get("Cliente", "")
 
@@ -207,6 +200,22 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
     df["Dirección"] = df.apply(
         lambda r: corregir_calle_castellon(r["Población"], r["Dirección"]),
         axis=1
+    ) 
+    
+    # -------------------------
+    # CALLE SIN NÚMERO
+    # -------------------------
+    df["CALLE"] = (
+        df["Dirección"]
+        .str.replace(r"\s*,?\s*\d+.*$", "", regex=True)
+        .str.strip()
+    )
+    
+    # CLAVE DE PARADA
+    df["PARADA"] = (
+        df["Población"].str.upper().str.strip() +
+        " | " +
+        df["CALLE"]
     )    
     
     # -------------------------
@@ -243,26 +252,26 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
     hosp = df[df["is_hospital"]].copy()
     fed = df[df["is_fed"]].copy()
     resto = df[~df["is_any_special"]].copy()
+    # -------------------------
+    # PARADAS REALES
+    # -------------------------
+    paradas = (
+        resto.groupby(["Z.Rep", "PARADA"])
+        .agg(
+            Población=("Población", "first"),
+            Calle=("CALLE", "first"),
+            Expediciones=("Exp", "count"),
+            Bultos=("Bultos", "sum"),
+            Kilos=("Kgs", "sum"),
+        )
+        .reset_index()
+    )   
     resto["Z.Rep"] = (
         resto["Z.Rep"]
         .astype(str)
         .str.strip()
         .replace(".", "")
     )
-    # -------------------------
-    # PARADAS REALES RESTO
-    # -------------------------
-    resto_paradas = (
-        resto.groupby(["Z.Rep", "PARADA"])
-        .agg(
-            Población=("Población", "first"),
-            Dirección=("Dirección", "first"),
-            Expediciones=("Exp", "count"),
-            Bultos=("Bultos", "sum"),
-            Kilos=("Kgs", "sum"),
-        )
-        .reset_index()
-)    
     
     # -------------------------
     # EXCEL
@@ -306,14 +315,6 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
         ws_f.append(row)
     style_sheet(ws_f)
 
-    # PARADAS REALES
-    ws_p = wb_out.create_sheet("PARADAS_REALES")
-    
-    for row in dataframe_to_rows(resto_paradas, index=False, header=True):
-        ws_p.append(row)
-    
-    style_sheet(ws_p)
-
     # ZREP
     existing = set(wb_out.sheetnames)
 
@@ -342,6 +343,13 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
 
         style_sheet(ws)
 
+    ws_p = wb_out.create_sheet("PARADAS")
+    
+    for row in dataframe_to_rows(paradas, index=False, header=True):
+        ws_p.append(row)
+    
+    style_sheet(ws_p)
+    
     out_path.parent.mkdir(parents=True, exist_ok=True)
     wb_out.save(out_path)
 
