@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from pathlib import Path
+from geocodificador import geocodificar
 import pandas as pd
 import re
 
@@ -212,20 +213,22 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen):
 
             lat, lon = coords[pueblo_norm]
 
-            if pd.notna(lat) and pd.notna(lon):
+        else:
 
-                df.at[idx, "Latitud"] = lat
-                df.at[idx, "Longitud"] = lon
+            direccion_completa = f"{str(row['Dirección']).strip()}, {str(row['Población']).strip()}, CASTELLON, ESPAÑA"
+            lat, lon = geocodificar(direccion_completa, api_key)
 
-                filas_con_coord.append((idx, float(lat), float(lon)))
+        if pd.notna(lat) and pd.notna(lon):
 
-            else:
+            df.at[idx, "Latitud"] = lat
+            df.at[idx, "Longitud"] = lon
 
-                filas_sin_coord.append(idx)
+            filas_con_coord.append((idx, float(lat), float(lon)))
 
         else:
 
             filas_sin_coord.append(idx)
+
 
     visitados = []
     restantes = filas_con_coord.copy()
@@ -297,13 +300,13 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen):
 # -------------------------------------------------
 # FUNCIÓN PRINCIPAL
 # -------------------------------------------------
-
 def reordenar_excel(
     input_path: Path,
     output_path: Path,
     ruta_coordenadas: Path,
     lat_origen: float,
     lon_origen: float,
+    api_key: str = "",
 ):
 
     hojas = pd.read_excel(input_path, sheet_name=None)
