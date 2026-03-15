@@ -3,7 +3,7 @@
 
 from pathlib import Path
 import pandas as pd
-
+import re
 
 # -------------------------------------------------
 # ORÍGENES
@@ -67,7 +67,28 @@ def normalizar_texto(txt):
 def distancia(a, b):
     return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2
 
+# ----- PARADAS------
+def extraer_calle_sin_numero(direccion: str) -> str:
+    if pd.isna(direccion):
+        return ""
+    m = re.match(r"(.*?)[,\s]+\d+.*$", str(direccion).strip())
+    if m:
+        return m.group(1).strip()
+    return str(direccion).strip()
 
+
+def calcular_paradas_por_hoja(hojas_resultado: dict) -> dict:
+    paradas = {}
+    for nombre, df in hojas_resultado.items():
+        if nombre in ("RESUMEN_UNICO", "METADATOS"):
+            continue
+        if "Población" not in df.columns or "Dirección" not in df.columns:
+            continue
+        calle_sin_num = df["Dirección"].apply(extraer_calle_sin_numero)
+        clave = df["Población"].astype(str).str.strip().str.upper() + "|" + calle_sin_num.str.upper()
+        paradas[nombre] = clave.nunique()
+    return paradas
+    
 # -------------------------------------------------
 # 2-OPT
 # -------------------------------------------------
@@ -296,6 +317,15 @@ def reordenar_excel(
 
             hojas_resultado[nombre] = df
 
+    paradas_por_hoja = calcular_paradas_por_hoja(hojas_resultado)
+
+    if "RESUMEN_UNICO" in hojas_resultado:
+        df_res = hojas_resultado["RESUMEN_UNICO"].copy()
+        if "Paradas" not in df_res.columns:
+            df_res["Paradas"] = ""
+        df_res["Paradas"] = df_res["Clave"].map(paradas_por_hoja).fillna(df_res["Paradas"])
+        hojas_resultado["RESUMEN_UNICO"] = df_res
+        
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
 
         for nombre, df in hojas_resultado.items():
