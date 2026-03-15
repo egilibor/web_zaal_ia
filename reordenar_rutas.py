@@ -217,7 +217,8 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen):
 
             direccion_completa = f"{str(row['Dirección']).strip()}, {str(row['Población']).strip()}, CASTELLON, ESPAÑA"
             lat, lon = geocodificar(direccion_completa, api_key)
-
+            print(f"Geocodificado: {direccion_completa} → {lat}, {lon}")
+            
         if pd.notna(lat) and pd.notna(lon):
 
             df.at[idx, "Latitud"] = lat
