@@ -191,7 +191,7 @@ def cargar_coordenadas(ruta):
 # ORDENACIÓN ZREP
 # -------------------------------------------------
 
-def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen):
+def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key=""):
 
     for col in COLUMNAS_OBLIGATORIAS:
         if col not in df.columns:
@@ -327,6 +327,7 @@ def reordenar_excel(
                 coords,
                 lat_origen,
                 lon_origen,
+                api_key=api_key,                
             )
 
             link = generar_link_pueblos(df_ordenado, lat_origen, lon_origen)
