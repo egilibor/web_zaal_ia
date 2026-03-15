@@ -319,6 +319,11 @@ def reordenar_excel(
 
     paradas_por_hoja = calcular_paradas_por_hoja(hojas_resultado)
 
+    # DEBUG - quitar después
+    print("Paradas calculadas:", paradas_por_hoja)
+    if "RESUMEN_UNICO" in hojas_resultado:
+        print("Claves en RESUMEN_UNICO:", hojas_resultado["RESUMEN_UNICO"]["Clave"].tolist())
+
     if "RESUMEN_UNICO" in hojas_resultado:
         df_res = hojas_resultado["RESUMEN_UNICO"].copy()
         if "Paradas" not in df_res.columns:
