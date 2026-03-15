@@ -188,7 +188,7 @@ with tab2:
                     lon_origen
                 )
 
-                generar_resumen_unico(str(output_path))
+                #generar_resumen_unico(str(output_path))
 
                 if output_path.exists():
 
