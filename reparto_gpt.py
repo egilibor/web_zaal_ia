@@ -12,7 +12,7 @@ from typing import List
 
 import pandas as pd
 import difflib
-
+import json
 # -------------------------
 # CALLEJERO CASTELLÓN
 # -------------------------
@@ -122,7 +122,13 @@ def norm(s: str) -> str:
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
-
+def extraer_calle_sin_numero(direccion: str) -> str:
+    """Elimina el número final de una dirección para obtener solo la calle."""
+    m = re.match(r"(.*?)[,\s]+\d+.*$", direccion.strip())
+    if m:
+        return m.group(1).strip()
+    return direccion.strip()
+    
 def sheet_to_df(wb, name: str) -> pd.DataFrame:
     if name not in wb.sheetnames:
         return pd.DataFrame()
@@ -313,9 +319,32 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
 
         style_sheet(ws)
 
+    # --- PARADAS: clave Población + calle sin número ---
+    df["Calle_sin_num"] = df["Dirección"].apply(extraer_calle_sin_numero)
+    df["Clave_parada"] = df["Población"].str.strip().str.upper() + "|" + df["Calle_sin_num"].str.upper()
+    
+    paradas_por_hoja = {}
+    
+    for hoja, subdf in [("HOSPITALES", hosp), ("FEDERACION", fed)]:
+        paradas_por_hoja[hoja] = subdf["Clave_parada"].nunique()
+    
+    for z, subdf in resto.groupby("Z.Rep"):
+        z = str(z).strip()
+        if z == ".":
+            z = ""
+        nombre = f"ZREP_{z}"
+        nombre = re.sub(r"[\\/*?:\[\]]", "_", nombre)[:31]
+        paradas_por_hoja[nombre] = subdf["Clave_parada"].nunique()
+    
+    # Guardar paradas en un CSV auxiliar junto al Excel
+
+    paradas_path = out_path.with_suffix(".paradas.json")
+    with open(paradas_path, "w", encoding="utf-8") as f:
+        json.dump(paradas_por_hoja, f, ensure_ascii=False)
+
+    # --- GUARDAR ---
     out_path.parent.mkdir(parents=True, exist_ok=True)
     wb_out.save(out_path)
-
 
 # -------------------------
 # MAIN
