@@ -238,7 +238,8 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
             df.at[i, "is_fed"] = True
 
     df["is_any_special"] = df["is_hospital"] | df["is_fed"]
-
+    df["Calle_sin_num"] = df["Dirección"].apply(extraer_calle_sin_numero)
+    df["Clave_parada"] = df["Población"].str.strip().str.upper() + "|" + df["Calle_sin_num"].str.upper()
     hosp = df[df["is_hospital"]].copy()
     fed = df[df["is_fed"]].copy()
     resto = df[~df["is_any_special"]].copy()
@@ -320,8 +321,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
         style_sheet(ws)
 
     # --- PARADAS: clave Población + calle sin número ---
-    df["Calle_sin_num"] = df["Dirección"].apply(extraer_calle_sin_numero)
-    df["Clave_parada"] = df["Población"].str.strip().str.upper() + "|" + df["Calle_sin_num"].str.upper()
+
     
     paradas_por_hoja = {}
     
