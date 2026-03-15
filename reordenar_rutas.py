@@ -331,3 +331,4 @@ def reordenar_excel(
         for nombre, df in hojas_resultado.items():
 
             df.to_excel(writer, sheet_name=nombre, index=False)
+    return paradas_por_hoja
