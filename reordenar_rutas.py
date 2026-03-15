@@ -209,16 +209,18 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen):
 
         pueblo_norm = normalizar_texto(row["Población"])
 
-        if pueblo_norm in coords:
+        lat, lon = (None, None)
 
-            lat, lon = coords[pueblo_norm]
-
-        else:
-
+        # Primero intentar geocodificación por dirección completa
+        if api_key:
             direccion_completa = f"{str(row['Dirección']).strip()}, {str(row['Población']).strip()}, CASTELLON, ESPAÑA"
             lat, lon = geocodificar(direccion_completa, api_key)
             print(f"Geocodificado: {direccion_completa} → {lat}, {lon}")
-            
+
+        # Fallback: libro de coordenadas por municipio
+        if (lat is None or lon is None) and pueblo_norm in coords:
+            lat, lon = coords[pueblo_norm]
+            print(f"Fallback municipio: {pueblo_norm} → {lat}, {lon}")
         if pd.notna(lat) and pd.notna(lon):
 
             df.at[idx, "Latitud"] = lat
