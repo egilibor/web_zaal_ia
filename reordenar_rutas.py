@@ -213,9 +213,12 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key=""):
 
         # Primero intentar geocodificación por dirección completa
         if api_key:
-            direccion_completa = f"{str(row['Dirección']).strip()}, {str(row['Población']).strip()}, CASTELLON, ESPAÑA"
-            lat, lon = geocodificar(direccion_completa, api_key)
-            print(f"Geocodificado: {direccion_completa} → {lat}, {lon}")
+            dir_limpia = str(row['Dirección']).strip()
+            pob_limpia = str(row['Población']).strip()
+            if dir_limpia.upper() not in ("NAN", "NONE", "") and pob_limpia.upper() not in ("NAN", "NONE", ""):
+                direccion_completa = f"{dir_limpia}, {pob_limpia}, CASTELLON, ESPAÑA"
+                lat, lon = geocodificar(direccion_completa, api_key)
+                print(f"Geocodificado: {direccion_completa} → {lat}, {lon}")
 
         # Fallback: libro de coordenadas por municipio
         if (lat is None or lon is None) and pueblo_norm in coords:
