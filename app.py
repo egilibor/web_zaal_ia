@@ -180,7 +180,7 @@ with tab2:
                     lat_origen = 39.804106
                     lon_origen = -0.217351
 
-                reordenar_excel(
+                paradas = reordenar_excel(
                     input_path,
                     output_path,
                     COORDENADAS_REPO,
@@ -188,8 +188,8 @@ with tab2:
                     lon_origen
                 )
 
-                generar_resumen_unico(str(output_path))
-
+                generar_resumen_unico(str(output_path), paradas_por_hoja=paradas)
+                
                 if output_path.exists():
 
                     st.success("Rutas reordenadas correctamente")
