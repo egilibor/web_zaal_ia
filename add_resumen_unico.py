@@ -1,7 +1,6 @@
-import json
-from pathlib import Path
 from openpyxl import load_workbook
 from openpyxl.styles import Font
+
 
 def encontrar_columna(ws, nombre):
     for col in range(1, ws.max_column + 1):
@@ -9,15 +8,10 @@ def encontrar_columna(ws, nombre):
             return col
     return None
 
-def generar_resumen_unico(ruta_excel: str) -> None:
-    wb = load_workbook(ruta_excel)
 
-    # Cargar paradas desde el JSON auxiliar
-    paradas_path = Path(ruta_excel).with_suffix(".paradas.json")
-    paradas_por_hoja = {}
-    if paradas_path.exists():
-        with open(paradas_path, "r", encoding="utf-8") as f:
-            paradas_por_hoja = json.load(f)
+def generar_resumen_unico(ruta_excel: str, paradas_por_hoja: dict = None) -> None:
+
+    wb = load_workbook(ruta_excel)
 
     if "RESUMEN_UNICO" in wb.sheetnames:
         del wb["RESUMEN_UNICO"]
@@ -41,7 +35,7 @@ def generar_resumen_unico(ruta_excel: str) -> None:
         col_kilos = encontrar_columna(ws, "Kgs") or encontrar_columna(ws, "Kilos")
         letra_bultos = ws.cell(row=1, column=col_bultos).column_letter
         letra_kilos = ws.cell(row=1, column=col_kilos).column_letter
-        paradas = paradas_por_hoja.get(hoja, "")
+        paradas = paradas_por_hoja.get(hoja, "") if paradas_por_hoja else ""
 
         ws_res.append([
             hoja,
@@ -58,7 +52,3 @@ def generar_resumen_unico(ruta_excel: str) -> None:
     ws_res.column_dimensions["E"].width = 12
 
     wb.save(ruta_excel)
-
-    # Limpiar JSON auxiliar
-    if paradas_path.exists():
-        paradas_path.unlink()
