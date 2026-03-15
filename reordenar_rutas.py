@@ -271,7 +271,27 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen):
 
     orden_final = visitados + filas_sin_coord
 
-    return df.loc[orden_final]
+    df_ordenado = df.loc[orden_final].copy()
+
+    # Agrupar por calle dentro de cada población sin alterar orden de poblaciones
+    df_ordenado["Calle_sin_num"] = df_ordenado["Dirección"].apply(extraer_calle_sin_numero)
+    df_ordenado["Clave_parada"] = (
+        df_ordenado["Población"].astype(str).str.strip().str.upper()
+        + "|"
+        + df_ordenado["Calle_sin_num"].str.upper()
+    )
+
+    # Asignar orden de población y orden de clave dentro de cada población
+    poblaciones_orden = {p: i for i, p in enumerate(df_ordenado["Población"].unique())}
+    df_ordenado["_ord_pob"] = df_ordenado["Población"].map(poblaciones_orden)
+
+    claves_orden = {c: i for i, c in enumerate(df_ordenado["Clave_parada"].unique())}
+    df_ordenado["_ord_clave"] = df_ordenado["Clave_parada"].map(claves_orden)
+
+    df_ordenado = df_ordenado.sort_values(["_ord_pob", "_ord_clave"])
+    df_ordenado = df_ordenado.drop(columns=["Calle_sin_num", "Clave_parada", "_ord_pob", "_ord_clave"])
+
+    return df_ordenado
 
 
 # -------------------------------------------------
