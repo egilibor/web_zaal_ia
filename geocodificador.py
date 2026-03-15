@@ -20,10 +20,10 @@ def _get_connection():
     return conn
 
 def geocodificar(direccion: str, api_key: str) -> tuple:
-    """
-    Devuelve (latitud, longitud) para una dirección.
-    Primero consulta la caché SQLite, si no está llama a la API de Google.
-    """
+    
+    if not direccion or str(direccion).strip().upper() in ("NAN", "NONE", ""):
+        return (None, None)
+
     direccion_norm = direccion.strip().upper()
 
     # Consultar caché
@@ -40,13 +40,12 @@ def geocodificar(direccion: str, api_key: str) -> tuple:
     # Llamar a la API
     try:
         gmaps = googlemaps.Client(key=api_key)
-        result = gmaps.geocode(direccion_norm)
+        result = gmaps.geocode(direccion_norm, region="es", language="es")
 
         if result:
             lat = result[0]["geometry"]["location"]["lat"]
             lon = result[0]["geometry"]["location"]["lng"]
 
-            # Guardar en caché
             conn.execute(
                 "INSERT INTO geocache (direccion, latitud, longitud) VALUES (?, ?, ?)",
                 (direccion_norm, lat, lon)
