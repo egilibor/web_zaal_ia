@@ -6,6 +6,7 @@ from geocodificador import geocodificar
 from openpyxl.styles import PatternFill
 import pandas as pd
 import re
+import googlemaps
 
 # -------------------------------------------------
 # ORÍGENES
