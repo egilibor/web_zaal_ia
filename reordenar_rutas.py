@@ -282,7 +282,7 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
             d = (lat - lat_actual) ** 2 + (lon - lon_actual) ** 2
             distancias.append((d, idx, lat, lon))
 
-        distancias.sort(key=lambda x: (x[0], x[1]))
+        distancias.sort(key=lambda x: (x[0], str(x[1])))
 
         _, idx_sel, lat_sel, lon_sel = distancias[0]
 
