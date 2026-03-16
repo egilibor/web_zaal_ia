@@ -208,7 +208,9 @@ with tab2:
                     st.error("No se generó el archivo reordenado.")
 
             except Exception as e:
+                import traceback
                 st.error(f"Error en reordenación: {e}")
+                st.code(traceback.format_exc())
 
         # -------------------------------------------------
         # DIVIDIR POR GESTORES (SOLO VALENCIA)
