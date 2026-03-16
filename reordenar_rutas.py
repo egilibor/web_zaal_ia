@@ -3,6 +3,7 @@
 
 from pathlib import Path
 from geocodificador import geocodificar
+from openpyxl.styles import PatternFill
 import pandas as pd
 import re
 
@@ -478,7 +479,7 @@ def reordenar_excel(
             ws.cell(row=2 + i, column=2).value = link
             ws.cell(row=2 + i, column=2).font = Font(color="0000FF", underline="single")
 
-from openpyxl.styles import PatternFill
+
 
     azul_claro = PatternFill(start_color="DDEEFF", end_color="DDEEFF", fill_type="solid")
 
