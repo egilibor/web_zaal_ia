@@ -428,7 +428,7 @@ def reordenar_excel(
         if nombre not in wb.sheetnames:
             continue
         ws = wb[nombre]
-        ws.insert_rows(1, amount=len(datos) + 1)
+        ws.insert_rows(1, amount=len(datos["segmentos"]) + 1)
         ws.cell(row=1, column=1).value = "RUTA COMPLETA"
         ws.cell(row=1, column=2).value = datos["link_completo"]
         ws.cell(row=1, column=2).font = Font(color="0000FF", underline="single")
