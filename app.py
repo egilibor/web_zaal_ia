@@ -180,16 +180,17 @@ with tab2:
                     lat_origen = 39.804106
                     lon_origen = -0.217351
                     
-
                 paradas = reordenar_excel(
                     input_path,
                     output_path,
                     COORDENADAS_REPO,
                     lat_origen,
                     lon_origen,
-                    api_key=st.secrets["GOOGLE_MAPS_API_KEY"]
+                    api_key=st.secrets["GOOGLE_MAPS_API_KEY"],
+                    delegacion=delegacion,
                 )
-
+                
+ 
                 generar_resumen_unico(str(output_path), paradas_por_hoja=paradas)
                 
                 if output_path.exists():
