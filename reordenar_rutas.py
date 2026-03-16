@@ -154,7 +154,37 @@ def generar_link_pueblos(df_ruta, lat_origen, lon_origen):
 
     return "https://www.google.com/maps/dir/" + "/".join(puntos)
 
+def generar_links_segmentos(df_ruta, lat_origen, lon_origen, tamanio=9):
 
+    puntos = []
+    coords_vistas = set()
+
+    for _, row in df_ruta.iterrows():
+        lat = row.get("Latitud")
+        lon = row.get("Longitud")
+        if pd.notna(lat) and pd.notna(lon):
+            clave = (round(float(lat), 5), round(float(lon), 5))
+            if clave not in coords_vistas:
+                coords_vistas.add(clave)
+                puntos.append(f"{clave[0]},{clave[1]}")
+
+    if not puntos:
+        return []
+
+    origen = f"{lat_origen},{lon_origen}"
+    links = []
+    
+    for i in range(0, len(puntos), tamanio):
+        segmento = puntos[i:i + tamanio]
+        # El segmento empieza donde terminó el anterior
+        if i == 0:
+            tramo = [origen] + segmento
+        else:
+            tramo = [puntos[i - 1]] + segmento
+        links.append("https://www.google.com/maps/dir/" + "/".join(tramo))
+
+    return links
+    
 # -------------------------------------------------
 # CARGAR COORDENADAS
 # -------------------------------------------------
@@ -357,10 +387,45 @@ def reordenar_excel(
             df_res["Paradas"] = ""
         df_res["Paradas"] = df_res["Clave"].map(paradas_por_hoja).fillna(df_res["Paradas"])
         hojas_resultado["RESUMEN_UNICO"] = df_res
+
+    # Construir enlaces de navegación por hoja
+    hojas_navegacion = {}
+    for nombre, df in hojas_resultado.items():
+        if not nombre.startswith("ZREP_"):
+            continue
+        if "Latitud" not in df.columns or "Longitud" not in df.columns:
+            continue
+        link_completo = generar_link_pueblos(df, lat_origen, lon_origen)
+        segmentos = generar_links_segmentos(df, lat_origen, lon_origen)
+        hojas_navegacion[nombre] = {
+            "link_completo": link_completo,
+            "segmentos": segmentos
+        }
         
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
 
         for nombre, df in hojas_resultado.items():
 
             df.to_excel(writer, sheet_name=nombre, index=False)
+
+    # Añadir filas de navegación al principio de cada hoja ZREP
+    from openpyxl import load_workbook
+    from openpyxl.styles import Font
+
+    wb = load_workbook(output_path)
+
+    for nombre, datos in hojas_navegacion.items():
+        if nombre not in wb.sheetnames:
+            continue
+        ws = wb[nombre]
+        ws.insert_rows(1, amount=len(datos) + 1)
+        ws.cell(row=1, column=1).value = "RUTA COMPLETA"
+        ws.cell(row=1, column=2).value = datos["link_completo"]
+        ws.cell(row=1, column=2).font = Font(color="0000FF", underline="single")
+        for i, link in enumerate(datos["segmentos"]):
+            ws.cell(row=2 + i, column=1).value = f"SEGMENTO {i + 1}"
+            ws.cell(row=2 + i, column=2).value = link
+            ws.cell(row=2 + i, column=2).font = Font(color="0000FF", underline="single")
+
+    wb.save(output_path)    
     return paradas_por_hoja
