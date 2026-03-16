@@ -294,9 +294,9 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
         restantes = [r for r in restantes if r[0] != idx_sel]
 
     coords_ruta = [(df.loc[i, "Latitud"], df.loc[i, "Longitud"]) for i in visitados]
-
+    coords_ruta = [(lat, lon) for lat, lon in coords_ruta if lat is not None and lon is not None]
     coords_mejoradas = mejorar_ruta_2opt(coords_ruta)
-
+    
     visitados_nuevo = []
     usados = set()
 
