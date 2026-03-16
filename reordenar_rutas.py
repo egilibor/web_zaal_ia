@@ -401,9 +401,30 @@ def reordenar_excel(
             if link:
                 df_ordenado.loc[df_ordenado.index[0], "NAVEGACIÓN"] = link
 
-            # Renombrar Hospital a Parada y asignar número de orden
+            # Renombrar Hospital a Parada y 
+            # Asignar número de parada por proximidad
+            UMBRAL = 0.0009  # ~100 metros
+            numeros_parada = []
+            paradas_unicas = []
+
+            for _, row in df_ordenado.iterrows():
+                lat = row.get("Latitud")
+                lon = row.get("Longitud")
+                if lat is not None and lon is not None and pd.notna(lat) and pd.notna(lon):
+                    asignada = False
+                    for num, p in enumerate(paradas_unicas, 1):
+                        if abs(float(lat) - p[0]) <= UMBRAL and abs(float(lon) - p[1]) <= UMBRAL:
+                            numeros_parada.append(num)
+                            asignada = True
+                            break
+                    if not asignada:
+                        paradas_unicas.append((float(lat), float(lon)))
+                        numeros_parada.append(len(paradas_unicas))
+                else:
+                    numeros_parada.append("")
+
             df_ordenado = df_ordenado.rename(columns={"Hospital": "Parada"})
-            df_ordenado["Parada"] = range(1, len(df_ordenado) + 1)
+            df_ordenado["Parada"] = numeros_parada
             hojas_resultado[nombre] = df_ordenado
         else:
 
@@ -456,6 +477,20 @@ def reordenar_excel(
             ws.cell(row=2 + i, column=1).value = f"SEGMENTO {i + 1}"
             ws.cell(row=2 + i, column=2).value = link
             ws.cell(row=2 + i, column=2).font = Font(color="0000FF", underline="single")
+
+from openpyxl.styles import PatternFill
+
+    azul_claro = PatternFill(start_color="DDEEFF", end_color="DDEEFF", fill_type="solid")
+
+    for nombre in hojas_navegacion.keys():
+        if nombre not in wb.sheetnames:
+            continue
+        ws = wb[nombre]
+        n_nav = len(hojas_navegacion[nombre]["segmentos"]) + 1
+        for row in ws.iter_rows(min_row=n_nav + 2):
+            if (row[0].row - n_nav) % 2 == 0:
+                for cell in row:
+                    cell.fill = azul_claro
 
     wb.save(output_path)    
     return paradas_por_hoja
