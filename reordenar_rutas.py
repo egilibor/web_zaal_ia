@@ -488,10 +488,15 @@ def reordenar_excel(
             continue
         ws = wb[nombre]
         n_nav = len(hojas_navegacion[nombre]["segmentos"]) + 1
+        
         for row in ws.iter_rows(min_row=n_nav + 2):
-            if (row[0].row - n_nav) % 2 == 0:
-                for cell in row:
-                    cell.fill = azul_claro
+                valor_parada = row[1].value
+                try:
+                    if int(valor_parada) % 2 != 0:
+                        for cell in row:
+                            cell.fill = azul_claro
+                except (TypeError, ValueError):
+                    pass
 
     wb.save(output_path)    
     return paradas_por_hoja
