@@ -64,8 +64,9 @@ def normalizar_texto(txt):
 # -------------------------------------------------
 # DISTANCIA
 # -------------------------------------------------
-
 def distancia(a, b):
+    if a[0] is None or a[1] is None or b[0] is None or b[1] is None:
+        return float('inf')
     return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2
 
 # ----- PARADAS------
