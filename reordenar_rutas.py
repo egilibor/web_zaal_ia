@@ -204,6 +204,43 @@ def generar_links_segmentos(df_ruta, lat_origen, lon_origen, tamanio=9):
         links.append("https://www.google.com/maps/dir/" + "/".join(tramo))
 
     return links
+
+# USANDO DISTANCE MATRIX API
+def obtener_distancias_reales(origen, destinos, api_key):
+    """
+    Consulta Distance Matrix API para obtener distancias reales
+    desde un origen a una lista de destinos.
+    origen: (lat, lon)
+    destinos: lista de (lat, lon)
+    Devuelve lista de distancias en metros
+    """
+    if not destinos:
+        return []
+
+    gmaps = googlemaps.Client(key=api_key)
+
+    origen_str = f"{origen[0]},{origen[1]}"
+    destinos_str = [f"{d[0]},{d[1]}" for d in destinos]
+
+    try:
+        result = gmaps.distance_matrix(
+            origins=[origen_str],
+            destinations=destinos_str,
+            mode="driving",
+            departure_time="now"
+        )
+
+        distancias = []
+        for elemento in result["rows"][0]["elements"]:
+            if elemento["status"] == "OK":
+                distancias.append(elemento["distance"]["value"])
+            else:
+                distancias.append(float("inf"))
+        return distancias
+
+    except Exception as e:
+        print(f"Error Distance Matrix: {e}")
+        return [float("inf")] * len(destinos)
     
 # -------------------------------------------------
 # CARGAR COORDENADAS
@@ -295,16 +332,24 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
 
     while restantes:
 
-        distancias = []
+        destinos = [(lat, lon) for _, lat, lon in restantes]
+        indices = [idx for idx, _, _ in restantes]
 
-        for idx, lat, lon in restantes:
+        if api_key:
+            dists = obtener_distancias_reales(
+                (lat_actual, lon_actual),
+                destinos,
+                api_key
+            )
+        else:
+            dists = [
+                (lat - lat_actual) ** 2 + (lon - lon_actual) ** 2
+                for _, lat, lon in restantes
+            ]
 
-            d = (lat - lat_actual) ** 2 + (lon - lon_actual) ** 2
-            distancias.append((d, idx, lat, lon))
-
-        distancias.sort(key=lambda x: (x[0], str(x[1])))
-
-        _, idx_sel, lat_sel, lon_sel = distancias[0]
+        min_idx = dists.index(min(dists))
+        idx_sel = indices[min_idx]
+        lat_sel, lon_sel = destinos[min_idx]
 
         visitados.append(idx_sel)
 
