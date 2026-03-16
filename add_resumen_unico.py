@@ -3,10 +3,16 @@ from openpyxl.styles import Font
 
 
 def encontrar_columna(ws, nombre):
-    for col in range(1, ws.max_column + 1):
-        if ws.cell(row=1, column=col).value == nombre:
-            return col
-    return None
+   for hoja in operativas:
+        ws = wb[hoja]
+        col_bultos = encontrar_columna(ws, "Bultos")
+        col_kilos = encontrar_columna(ws, "Kgs") or encontrar_columna(ws, "Kilos")
+        
+        if col_bultos is None or col_kilos is None:
+            continue
+            
+        letra_bultos = ws.cell(row=1, column=col_bultos).column_letter
+        letra_kilos = ws.cell(row=1, column=col_kilos).column_letter
 
 
 def generar_resumen_unico(ruta_excel: str, paradas_por_hoja: dict = None) -> None:
