@@ -191,8 +191,8 @@ def cargar_coordenadas(ruta):
 # ORDENACIÓN ZREP
 # -------------------------------------------------
 
-def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key=""):
-
+def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", delegacion="castellon"):
+    
     for col in COLUMNAS_OBLIGATORIAS:
         if col not in df.columns:
             raise ValueError(f"Falta columna obligatoria: {col}")
@@ -216,7 +216,8 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key=""):
             dir_limpia = str(row['Dirección']).strip()
             pob_limpia = str(row['Población']).strip()
             if dir_limpia.upper() not in ("NAN", "NONE", "") and pob_limpia.upper() not in ("NAN", "NONE", ""):
-                direccion_completa = f"{dir_limpia}, {pob_limpia}, CASTELLON, ESPAÑA"
+                provincia = "VALENCIA" if delegacion == "valencia" else "CASTELLON"
+                direccion_completa = f"{dir_limpia}, {pob_limpia}, {provincia}, ESPAÑA"
                 lat, lon = geocodificar(direccion_completa, api_key)
                 print(f"Geocodificado: {direccion_completa} → {lat}, {lon}")
 
@@ -313,8 +314,9 @@ def reordenar_excel(
     lat_origen: float,
     lon_origen: float,
     api_key: str = "",
+    delegacion: str = "castellon",
 ):
-
+    
     hojas = pd.read_excel(input_path, sheet_name=None)
 
     coords = cargar_coordenadas(ruta_coordenadas)
@@ -324,15 +326,15 @@ def reordenar_excel(
     for nombre, df in hojas.items():
 
         if nombre.startswith("ZREP_"):
-
             df_ordenado = ordenar_dataframe_zrep(
                 df,
                 coords,
                 lat_origen,
                 lon_origen,
-                api_key=api_key,                
+                api_key=api_key,
+                delegacion=delegacion,
             )
-
+            
             link = generar_link_pueblos(df_ordenado, lat_origen, lon_origen)
 
             # Columna navegación al final (no rompe RESUMEN_UNICO)
