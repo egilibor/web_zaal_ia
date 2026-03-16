@@ -404,7 +404,7 @@ def reordenar_excel(
             # Renombrar Hospital a Parada y asignar número de orden
             df_ordenado = df_ordenado.rename(columns={"Hospital": "Parada"})
             df_ordenado["Parada"] = range(1, len(df_ordenado) + 1)
-
+            hojas_resultado[nombre] = df_ordenado
         else:
 
             hojas_resultado[nombre] = df
