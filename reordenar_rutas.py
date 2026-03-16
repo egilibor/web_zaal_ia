@@ -80,15 +80,33 @@ def extraer_calle_sin_numero(direccion: str) -> str:
 
 
 def calcular_paradas_por_hoja(hojas_resultado: dict) -> dict:
+    UMBRAL = 0.0009  # ~100 metros
     paradas = {}
     for nombre, df in hojas_resultado.items():
         if nombre in ("RESUMEN_UNICO", "METADATOS"):
             continue
-        if "Población" not in df.columns or "Dirección" not in df.columns:
+        if "Latitud" not in df.columns or "Longitud" not in df.columns:
             continue
-        calle_sin_num = df["Dirección"].apply(extraer_calle_sin_numero)
-        clave = df["Población"].astype(str).str.strip().str.upper() + "|" + calle_sin_num.str.upper()
-        paradas[nombre] = clave.nunique()
+
+        coords_validas = []
+        for _, row in df.iterrows():
+            lat = row.get("Latitud")
+            lon = row.get("Longitud")
+            if lat is not None and lon is not None and pd.notna(lat) and pd.notna(lon):
+                coords_validas.append((float(lat), float(lon)))
+
+        paradas_unicas = []
+        for coord in coords_validas:
+            es_nueva = True
+            for p in paradas_unicas:
+                if abs(coord[0] - p[0]) <= UMBRAL and abs(coord[1] - p[1]) <= UMBRAL:
+                    es_nueva = False
+                    break
+            if es_nueva:
+                paradas_unicas.append(coord)
+
+        paradas[nombre] = len(paradas_unicas)
+
     return paradas
     
 # -------------------------------------------------
