@@ -64,14 +64,19 @@ def normalizar_texto(txt):
 
 
 # -------------------------------------------------
-# DISTANCIA
+# DISTANCIA EUCLIDIANA
 # -------------------------------------------------
+
 def distancia(a, b):
     if a[0] is None or a[1] is None or b[0] is None or b[1] is None:
         return float('inf')
     return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2
 
-# ----- PARADAS------
+
+# -------------------------------------------------
+# PARADAS
+# -------------------------------------------------
+
 def extraer_calle_sin_numero(direccion: str) -> str:
     if pd.isna(direccion):
         return ""
@@ -110,9 +115,10 @@ def calcular_paradas_por_hoja(hojas_resultado: dict) -> dict:
         paradas[nombre] = len(paradas_unicas)
 
     return paradas
-    
+
+
 # -------------------------------------------------
-# 2-OPT
+# 2-OPT (se mantiene como utilidad auxiliar)
 # -------------------------------------------------
 
 def mejorar_ruta_2opt(coords):
@@ -139,7 +145,6 @@ def mejorar_ruta_2opt(coords):
                 nuevo = distancia(a, c) + distancia(b, d)
 
                 if nuevo < actual:
-
                     mejor[i:j] = reversed(mejor[i:j])
                     mejora = True
 
@@ -147,26 +152,20 @@ def mejorar_ruta_2opt(coords):
 
 
 # -------------------------------------------------
-# GOOGLE MAPS LINK
+# GOOGLE MAPS LINKS
 # -------------------------------------------------
 
 def generar_link_pueblos(df_ruta, lat_origen, lon_origen):
 
     puntos = [f"{lat_origen},{lon_origen}"]
-
     coords_vistas = set()
 
     for _, row in df_ruta.iterrows():
-
         lat = row.get("Latitud")
         lon = row.get("Longitud")
-
         if pd.notna(lat) and pd.notna(lon):
-
             clave = (round(float(lat), 5), round(float(lon), 5))
-
             if clave not in coords_vistas:
-
                 coords_vistas.add(clave)
                 puntos.append(f"{clave[0]},{clave[1]}")
 
@@ -174,6 +173,7 @@ def generar_link_pueblos(df_ruta, lat_origen, lon_origen):
         return ""
 
     return "https://www.google.com/maps/dir/" + "/".join(puntos)
+
 
 def generar_links_segmentos(df_ruta, lat_origen, lon_origen, tamanio=9):
 
@@ -194,10 +194,9 @@ def generar_links_segmentos(df_ruta, lat_origen, lon_origen, tamanio=9):
 
     origen = f"{lat_origen},{lon_origen}"
     links = []
-    
+
     for i in range(0, len(puntos), tamanio):
         segmento = puntos[i:i + tamanio]
-        # El segmento empieza donde terminó el anterior
         if i == 0:
             tramo = [origen] + segmento
         else:
@@ -206,43 +205,7 @@ def generar_links_segmentos(df_ruta, lat_origen, lon_origen, tamanio=9):
 
     return links
 
-# USANDO DISTANCE MATRIX API
-def obtener_distancias_reales(origen, destinos, api_key):
-    """
-    Consulta Distance Matrix API para obtener distancias reales
-    desde un origen a una lista de destinos.
-    origen: (lat, lon)
-    destinos: lista de (lat, lon)
-    Devuelve lista de distancias en metros
-    """
-    if not destinos:
-        return []
 
-    gmaps = googlemaps.Client(key=api_key)
-
-    origen_str = f"{origen[0]},{origen[1]}"
-    destinos_str = [f"{d[0]},{d[1]}" for d in destinos]
-
-    try:
-        result = gmaps.distance_matrix(
-            origins=[origen_str],
-            destinations=destinos_str,
-            mode="driving",
-            departure_time="now"
-        )
-
-        distancias = []
-        for elemento in result["rows"][0]["elements"]:
-            if elemento["status"] == "OK":
-                distancias.append(elemento["distance"]["value"])
-            else:
-                distancias.append(float("inf"))
-        return distancias
-
-    except Exception as e:
-        print(f"Error Distance Matrix: {e}")
-        return [float("inf")] * len(destinos)
-    
 # -------------------------------------------------
 # CARGAR COORDENADAS
 # -------------------------------------------------
@@ -250,11 +213,9 @@ def obtener_distancias_reales(origen, destinos, api_key):
 def cargar_coordenadas(ruta):
 
     df = pd.read_excel(ruta)
-
     df.columns = df.columns.str.strip().str.upper()
 
     if not {"PUEBLO", "LATITUD", "LONGITUD"}.issubset(df.columns):
-
         raise ValueError(
             f"Columnas detectadas: {list(df.columns)}. "
             "Se esperaban: PUEBLO, LATITUD, LONGITUD."
@@ -263,16 +224,67 @@ def cargar_coordenadas(ruta):
     coords = {}
 
     for _, row in df.iterrows():
-
         pueblo = normalizar_texto(row["PUEBLO"])
         lat = row["LATITUD"]
         lon = row["LONGITUD"]
-
         if pd.notna(pueblo) and pd.notna(lat) and pd.notna(lon):
-
             coords[pueblo] = (float(lat), float(lon))
 
     return coords
+
+
+# -------------------------------------------------
+# ORDENACIÓN CON DIRECTIONS API (optimize_waypoints)
+# -------------------------------------------------
+
+def ordenar_segmento_api(origen, waypoints_coords, api_key):
+    """
+    Llama a Directions API con optimize_waypoints=True.
+    Devuelve el orden óptimo de los waypoints.
+    """
+    try:
+        gmaps = googlemaps.Client(key=api_key)
+        wp_str = [f"{lat},{lon}" for lat, lon in waypoints_coords]
+
+        resultado = gmaps.directions(
+            origin=f"{origen[0]},{origen[1]}",
+            destination=f"{waypoints_coords[-1][0]},{waypoints_coords[-1][1]}",
+            waypoints=wp_str[:-1],  # el último es el destino
+            optimize_waypoints=True,
+            mode="driving"
+        )
+
+        if resultado:
+            orden = resultado[0]['waypoint_order']
+            # reincorporar el último punto (destino)
+            orden_completo = orden + [len(waypoints_coords) - 1]
+            return orden_completo
+
+    except Exception as e:
+        print(f"Error Directions API: {e}")
+
+    # fallback: orden original
+    return list(range(len(waypoints_coords)))
+
+
+def ordenar_euclidiano(origen, waypoints_coords):
+    """Nearest-neighbor con distancia euclidiana como fallback."""
+    restantes = list(range(len(waypoints_coords)))
+    orden = []
+    lat_actual, lon_actual = origen
+
+    while restantes:
+        dists = [
+            (waypoints_coords[i][0] - lat_actual) ** 2 +
+            (waypoints_coords[i][1] - lon_actual) ** 2
+            for i in restantes
+        ]
+        min_idx = restantes[dists.index(min(dists))]
+        orden.append(min_idx)
+        lat_actual, lon_actual = waypoints_coords[min_idx]
+        restantes.remove(min_idx)
+
+    return orden
 
 
 # -------------------------------------------------
@@ -280,26 +292,22 @@ def cargar_coordenadas(ruta):
 # -------------------------------------------------
 
 def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", delegacion="castellon"):
-    
+
     for col in COLUMNAS_OBLIGATORIAS:
         if col not in df.columns:
             raise ValueError(f"Falta columna obligatoria: {col}")
 
     df = df.copy()
-
     df["Latitud"] = None
     df["Longitud"] = None
 
-    filas_con_coord = []
-    filas_sin_coord = []
-
+    # -------------------------------------------------
+    # GEOCODIFICACIÓN
+    # -------------------------------------------------
     for idx, row in df.iterrows():
-
         pueblo_norm = normalizar_texto(row["Población"])
-
         lat, lon = (None, None)
 
-        # Primero intentar geocodificación por dirección completa
         if api_key:
             dir_limpia = str(row['Dirección']).strip()
             pob_limpia = str(row['Población']).strip()
@@ -309,84 +317,77 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
                 lat, lon = geocodificar(direccion_completa, api_key)
                 print(f"Geocodificado: {direccion_completa} → {lat}, {lon}")
 
-        # Fallback: libro de coordenadas por municipio
         if (lat is None or lon is None) and pueblo_norm in coords:
             lat, lon = coords[pueblo_norm]
             print(f"Fallback municipio: {pueblo_norm} → {lat}, {lon}")
-        if pd.notna(lat) and pd.notna(lon):
 
+        if pd.notna(lat) and pd.notna(lon):
             df.at[idx, "Latitud"] = lat
             df.at[idx, "Longitud"] = lon
 
-            filas_con_coord.append((idx, float(lat), float(lon)))
+    # -------------------------------------------------
+    # SEPARAR FILAS CON Y SIN COORDENADAS
+    # -------------------------------------------------
+    filas_con_coord = [
+        (idx, float(df.at[idx, "Latitud"]), float(df.at[idx, "Longitud"]))
+        for idx in df.index
+        if pd.notna(df.at[idx, "Latitud"]) and pd.notna(df.at[idx, "Longitud"])
+    ]
+    filas_sin_coord = [
+        idx for idx in df.index
+        if pd.isna(df.at[idx, "Latitud"]) or pd.isna(df.at[idx, "Longitud"])
+    ]
 
-        else:
+    if not filas_con_coord:
+        return df
 
-            filas_sin_coord.append(idx)
+    # -------------------------------------------------
+    # AGRUPAR EN PARADAS ÚNICAS POR PROXIMIDAD
+    # -------------------------------------------------
+    UMBRAL = 0.0009  # ~100 metros
+    paradas_unicas = []      # lista de (lat, lon)
+    idx_por_parada = []      # lista de listas de índices por parada
 
-
-    visitados = []
-    restantes = filas_con_coord.copy()
-
-    lat_actual = lat_origen
-    lon_actual = lon_origen
-
-    while restantes:
-
-        destinos = [(lat, lon) for _, lat, lon in restantes]
-        indices = [idx for idx, _, _ in restantes]
-
-        if api_key:
-            dists = obtener_distancias_reales(
-                (lat_actual, lon_actual),
-                destinos,
-                api_key
-            )
-        else:
-            dists = [
-                (lat - lat_actual) ** 2 + (lon - lon_actual) ** 2
-                for _, lat, lon in restantes
-            ]
-
-        min_idx = dists.index(min(dists))
-        idx_sel = indices[min_idx]
-        lat_sel, lon_sel = destinos[min_idx]
-
-        visitados.append(idx_sel)
-
-        lat_actual = lat_sel
-        lon_actual = lon_sel
-
-        restantes = [r for r in restantes if r[0] != idx_sel]
-
-    coords_ruta = []
-    visitados_validos = []
-    for i in visitados:
-        lat = df.loc[i, "Latitud"]
-        lon = df.loc[i, "Longitud"]
-        if lat is not None and lon is not None:
-            coords_ruta.append((lat, lon))
-            visitados_validos.append(i)
-
-    visitados = visitados_validos
-
-    coords_mejoradas = mejorar_ruta_2opt(coords_ruta)
-
-    visitados_nuevo = []
-    usados = set()
-
-    for c in coords_mejoradas:
-        for i in visitados:
-            if i not in usados and (df.loc[i, "Latitud"], df.loc[i, "Longitud"]) == c:
-                visitados_nuevo.append(i)
-                usados.add(i)
+    for idx, lat, lon in filas_con_coord:
+        asignada = False
+        for i, p in enumerate(paradas_unicas):
+            if abs(lat - p[0]) <= UMBRAL and abs(lon - p[1]) <= UMBRAL:
+                idx_por_parada[i].append(idx)
+                asignada = True
                 break
+        if not asignada:
+            paradas_unicas.append((lat, lon))
+            idx_por_parada.append([idx])
 
-    visitados = visitados_nuevo
+    # -------------------------------------------------
+    # ORDENAR PARADAS (Directions API o fallback euclidiano)
+    # -------------------------------------------------
+    MAX_WAYPOINTS = 25
+    orden_paradas = []
+    origen_actual = (lat_origen, lon_origen)
 
-    orden_final = visitados + filas_sin_coord
+    for i in range(0, len(paradas_unicas), MAX_WAYPOINTS):
+        segmento = paradas_unicas[i:i + MAX_WAYPOINTS]
 
-    df_ordenado = df.loc[orden_final].copy()
+        if api_key and len(segmento) >= 2:
+            orden_seg = ordenar_segmento_api(origen_actual, segmento, api_key)
+        else:
+            orden_seg = ordenar_euclidiano(origen_actual, segmento)
+
+        orden_paradas.extend([i + o for o in orden_seg])
+
+        # el origen del siguiente segmento es la última parada de este
+        origen_actual = paradas_unicas[i + orden_seg[-1]]
+
+    # -------------------------------------------------
+    # RECONSTRUIR ORDEN DE FILAS
+    # -------------------------------------------------
+    indices_ordenados = []
+    for pos in orden_paradas:
+        indices_ordenados.extend(idx_por_parada[pos])
+    indices_ordenados.extend(filas_sin_coord)
+
+    df_ordenado = df.loc[indices_ordenados].copy()
 
     # Agrupar por calle dentro de cada población sin alterar orden de poblaciones
     df_ordenado["Calle_sin_num"] = df_ordenado["Dirección"].apply(extraer_calle_sin_numero)
@@ -396,7 +397,6 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
         + df_ordenado["Calle_sin_num"].str.upper()
     )
 
-    # Asignar orden de población y orden de clave dentro de cada población
     poblaciones_orden = {p: i for i, p in enumerate(df_ordenado["Población"].unique())}
     df_ordenado["_ord_pob"] = df_ordenado["Población"].map(poblaciones_orden)
 
@@ -412,6 +412,7 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
 # -------------------------------------------------
 # FUNCIÓN PRINCIPAL
 # -------------------------------------------------
+
 def reordenar_excel(
     input_path: Path,
     output_path: Path,
@@ -421,11 +422,9 @@ def reordenar_excel(
     api_key: str = "",
     delegacion: str = "castellon",
 ):
-    
+
     hojas = pd.read_excel(input_path, sheet_name=None)
-
     coords = cargar_coordenadas(ruta_coordenadas)
-
     hojas_resultado = {}
 
     for nombre, df in hojas.items():
@@ -439,18 +438,16 @@ def reordenar_excel(
                 api_key=api_key,
                 delegacion=delegacion,
             )
-            
+
             link = generar_link_pueblos(df_ordenado, lat_origen, lon_origen)
 
-            # Columna navegación al final (no rompe RESUMEN_UNICO)
             df_ordenado["NAVEGACIÓN"] = ""
 
             if link:
                 df_ordenado.loc[df_ordenado.index[0], "NAVEGACIÓN"] = link
 
-            # Renombrar Hospital a Parada y 
             # Asignar número de parada por proximidad
-            UMBRAL = 0.0009  # ~100 metros
+            UMBRAL = 0.0009
             numeros_parada = []
             paradas_unicas = []
 
@@ -473,8 +470,8 @@ def reordenar_excel(
             df_ordenado = df_ordenado.rename(columns={"Hospital": "Parada"})
             df_ordenado["Parada"] = numeros_parada
             hojas_resultado[nombre] = df_ordenado
-        else:
 
+        else:
             hojas_resultado[nombre] = df
 
     paradas_por_hoja = calcular_paradas_por_hoja(hojas_resultado)
@@ -499,11 +496,9 @@ def reordenar_excel(
             "link_completo": link_completo,
             "segmentos": segmentos
         }
-        
+
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
-
         for nombre, df in hojas_resultado.items():
-
             df.to_excel(writer, sheet_name=nombre, index=False)
 
     # Añadir filas de navegación al principio de cada hoja ZREP
@@ -525,8 +520,6 @@ def reordenar_excel(
             ws.cell(row=2 + i, column=2).value = link
             ws.cell(row=2 + i, column=2).font = Font(color="0000FF", underline="single")
 
-
-
     azul_claro = PatternFill(start_color="DDEEFF", end_color="DDEEFF", fill_type="solid")
 
     for nombre in hojas_navegacion.keys():
@@ -534,15 +527,15 @@ def reordenar_excel(
             continue
         ws = wb[nombre]
         n_nav = len(hojas_navegacion[nombre]["segmentos"]) + 1
-        
-        for row in ws.iter_rows(min_row=n_nav + 2):
-                valor_parada = row[1].value
-                try:
-                    if int(valor_parada) % 2 != 0:
-                        for cell in row:
-                            cell.fill = azul_claro
-                except (TypeError, ValueError):
-                    pass
 
-    wb.save(output_path)    
+        for row in ws.iter_rows(min_row=n_nav + 2):
+            valor_parada = row[1].value
+            try:
+                if int(valor_parada) % 2 != 0:
+                    for cell in row:
+                        cell.fill = azul_claro
+            except (TypeError, ValueError):
+                pass
+
+    wb.save(output_path)
     return paradas_por_hoja
