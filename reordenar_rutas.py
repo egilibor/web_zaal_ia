@@ -431,7 +431,7 @@ def reordenar_excel(
     hojas_resultado = {}
 
     for nombre, df in hojas.items():
-
+        print(f"DEBUG hoja: '{nombre}'")
         if nombre.startswith("ZREP_"):
             df_ordenado = ordenar_dataframe_zrep(
                 df,
