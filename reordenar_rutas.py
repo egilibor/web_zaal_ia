@@ -239,8 +239,6 @@ def cargar_coordenadas(ruta):
 
 def ordenar_segmento_api(origen, waypoints_coords, api_key):
     """
-    print(f"DEBUG llamando Directions API con {len(waypoints_coords)} waypoints")
-    
     Llama a Directions API con optimize_waypoints=True.
     Devuelve el orden óptimo de los waypoints.
     """
@@ -261,9 +259,12 @@ def ordenar_segmento_api(origen, waypoints_coords, api_key):
             # reincorporar el último punto (destino)
             orden_completo = orden + [len(waypoints_coords) - 1]
             return orden_completo
+        else:
+            print(f"DEBUG Directions API devolvió resultado vacío")
 
     except Exception as e:
         print(f"Error Directions API: {e}")
+        raise
 
     # fallback: orden original
     return list(range(len(waypoints_coords)))
@@ -294,8 +295,7 @@ def ordenar_euclidiano(origen, waypoints_coords):
 # -------------------------------------------------
 
 def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", delegacion="castellon"):
-    print(f"DEBUG api_key: '{api_key[:10] if api_key else 'VACÍA'}'")
-    print(f"DEBUG paradas_unicas antes de API: pendiente")
+
     for col in COLUMNAS_OBLIGATORIAS:
         if col not in df.columns:
             raise ValueError(f"Falta columna obligatoria: {col}")
@@ -431,7 +431,7 @@ def reordenar_excel(
     hojas_resultado = {}
 
     for nombre, df in hojas.items():
-        print(f"DEBUG hoja: '{nombre}'")
+        
         if nombre.startswith("ZREP_"):
             df_ordenado = ordenar_dataframe_zrep(
                 df,
