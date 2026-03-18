@@ -7,6 +7,7 @@ from openpyxl.styles import PatternFill
 import pandas as pd
 import re
 import googlemaps
+import requests 
 
 # -------------------------------------------------
 # ORÍGENES
@@ -237,38 +238,58 @@ def cargar_coordenadas(ruta):
 # ORDENACIÓN CON DIRECTIONS API (optimize_waypoints)
 # -------------------------------------------------
 
+import requests
+
 def ordenar_segmento_api(origen, waypoints_coords, api_key):
     """
-    Llama a Directions API con optimize_waypoints=True.
-    Devuelve el orden óptimo de los waypoints.
+    Llama a la Routes API nueva con optimización de waypoints.
     """
     try:
-        gmaps = googlemaps.Client(key=api_key)
-        wp_str = [f"{lat},{lon}" for lat, lon in waypoints_coords]
+        url = "https://routes.googleapis.com/directions/v2:computeRoutes"
+        
+        headers = {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": api_key,
+            "X-Goog-FieldMask": "routes.optimizedIntermediateWaypointIndex"
+        }
 
-        resultado = gmaps.directions(
-            origin=f"{origen[0]},{origen[1]}",
-            destination=f"{waypoints_coords[-1][0]},{waypoints_coords[-1][1]}",
-            waypoints=wp_str[:-1],  # el último es el destino
-            optimize_waypoints=True,
-            mode="driving"
-        )
+        # origen y destino
+        body = {
+            "origin": {
+                "location": {"latLng": {"latitude": origen[0], "longitude": origen[1]}}
+            },
+            "destination": {
+                "location": {"latLng": {
+                    "latitude": waypoints_coords[-1][0],
+                    "longitude": waypoints_coords[-1][1]
+                }}
+            },
+            "intermediates": [
+                {
+                    "location": {"latLng": {"latitude": lat, "longitude": lon}}
+                }
+                for lat, lon in waypoints_coords[:-1]
+            ],
+            "travelMode": "DRIVE",
+            "optimizeWaypointOrder": True
+        }
 
-        if resultado:
-            orden = resultado[0]['waypoint_order']
-            # reincorporar el último punto (destino)
+        r = requests.post(url, json=body, headers=headers, timeout=10)
+        data = r.json()
+
+        if "routes" in data and data["routes"]:
+            orden = data["routes"][0].get("optimizedIntermediateWaypointIndex", [])
+            # reincorporar el destino (último punto)
             orden_completo = orden + [len(waypoints_coords) - 1]
             return orden_completo
         else:
-            print(f"DEBUG Directions API devolvió resultado vacío")
+            print(f"DEBUG Routes API sin resultado: {data}")
 
     except Exception as e:
-        print(f"Error Directions API: {e}")
+        print(f"DEBUG Error Routes API: {e}")
         raise
 
-    # fallback: orden original
     return list(range(len(waypoints_coords)))
-
 
 def ordenar_euclidiano(origen, waypoints_coords):
     """Nearest-neighbor con distancia euclidiana como fallback."""
