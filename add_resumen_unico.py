@@ -1,5 +1,6 @@
 from openpyxl import load_workbook
 from openpyxl.styles import Font
+from openpyxl.utils import quote_sheetname
 
 
 def encontrar_columna(ws, nombre):
@@ -30,7 +31,7 @@ def generar_resumen_unico(ruta_excel: str, paradas_por_hoja: dict = None) -> Non
     for cell in ws_res[1]:
         cell.font = Font(bold=True)
 
-    for hoja in operativas:
+    for fila_idx, hoja in enumerate(operativas, start=2):
         ws = wb[hoja]
         col_bultos = encontrar_columna(ws, "Bultos")
         col_kilos = encontrar_columna(ws, "Kgs") or encontrar_columna(ws, "Kilos")
@@ -49,6 +50,17 @@ def generar_resumen_unico(ruta_excel: str, paradas_por_hoja: dict = None) -> Non
             f"=SUM('{hoja}'!{letra_kilos}:{letra_kilos})",
             paradas
         ])
+
+        # Hipervínculo en columna Clave → hoja correspondiente
+        cell = ws_res.cell(row=fila_idx, column=1)
+        cell.hyperlink = f"#{quote_sheetname(hoja)}!A1"
+        cell.font = Font(color="0000FF", underline="single")
+
+        # Hipervínculo de regreso en cada hoja → RESUMEN_UNICO
+        cell_back = ws.cell(row=1, column=ws.max_column + 1)
+        cell_back.value = "← RESUMEN"
+        cell_back.hyperlink = f"#{quote_sheetname('RESUMEN_UNICO')}!A1"
+        cell_back.font = Font(color="0000FF", underline="single", bold=True)
 
     ws_res.column_dimensions["A"].width = 30
     ws_res.column_dimensions["B"].width = 15
