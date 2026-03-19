@@ -269,7 +269,6 @@ def ordenar_segmento_api(origen, waypoints_coords, api_key, hora_salida=None):
             ],
             "travelMode": "DRIVE",
             "optimizeWaypointOrder": True,
-            "routingPreference": "TRAFFIC_AWARE"
         }
 
         if hora_salida:
