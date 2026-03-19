@@ -80,6 +80,10 @@ if st.sidebar.button("🔄 Cambiar delegación"):
     st.session_state.delegacion_activa = None
     st.session_state.pop("workdir", None)
     st.rerun()
+
+hora_salida = st.sidebar.time_input(
+    "Hora de salida",
+    value=datetime.time(8, 30)
     
 # ==========================================================
 # MENÚ HORIZONTAL
