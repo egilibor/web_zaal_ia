@@ -17,6 +17,10 @@ from modulo_valencia_gestores import generar_libros_gestores
 st.set_page_config(page_title="Reparto determinista", layout="wide")
 st.title("Reparto determinista")
 
+if "GOOGLE_MAPS_API_KEY" not in st.secrets:
+    st.error("⚠️ Falta la clave GOOGLE_MAPS_API_KEY en los secrets. Contacta con el administrador.")
+    st.stop()
+
 REPO_DIR = Path(__file__).resolve().parent
 SCRIPT_REPARTO = REPO_DIR / "reparto_gpt.py"
 REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
