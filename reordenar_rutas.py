@@ -337,13 +337,15 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
             pob_limpia = str(row['Población']).strip()
             if dir_limpia.upper() not in ("NAN", "NONE", "") and pob_limpia.upper() not in ("NAN", "NONE", ""):
                 provincia = "VALENCIA" if delegacion == "valencia" else "CASTELLON"
-                direccion_completa = f"{dir_limpia}, {pob_limpia}, {provincia}, ESPAÑA"
+                cp_limpio = str(row.get('C.P.', '')).strip()
+                if cp_limpio.upper() not in ("NAN", "NONE", ""):
+                    direccion_completa = f"{dir_limpia}, {cp_limpio} {pob_limpia}, {provincia}, ESPAÑA"
+                else:
+                    direccion_completa = f"{dir_limpia}, {pob_limpia}, {provincia}, ESPAÑA"
                 lat, lon = geocodificar(direccion_completa, api_key)
-                print(f"Geocodificado: {direccion_completa} → {lat}, {lon}")
 
         if (lat is None or lon is None) and pueblo_norm in coords:
             lat, lon = coords[pueblo_norm]
-            print(f"Fallback municipio: {pueblo_norm} → {lat}, {lon}")
 
         if pd.notna(lat) and pd.notna(lon):
             df.at[idx, "Latitud"] = lat
