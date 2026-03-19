@@ -8,6 +8,7 @@ import pandas as pd
 import re
 import googlemaps
 import requests 
+import datetime
 
 # -------------------------------------------------
 # ORÍGENES
@@ -240,20 +241,16 @@ def cargar_coordenadas(ruta):
 
 import requests
 
-def ordenar_segmento_api(origen, waypoints_coords, api_key):
-    """
-    Llama a la Routes API nueva con optimización de waypoints.
-    """
+def ordenar_segmento_api(origen, waypoints_coords, api_key, hora_salida=None):
     try:
         url = "https://routes.googleapis.com/directions/v2:computeRoutes"
-        
+
         headers = {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": api_key,
             "X-Goog-FieldMask": "routes.optimizedIntermediateWaypointIndex"
         }
 
-        # origen y destino
         body = {
             "origin": {
                 "location": {"latLng": {"latitude": origen[0], "longitude": origen[1]}}
@@ -271,15 +268,20 @@ def ordenar_segmento_api(origen, waypoints_coords, api_key):
                 for lat, lon in waypoints_coords[:-1]
             ],
             "travelMode": "DRIVE",
-            "optimizeWaypointOrder": True
+            "optimizeWaypointOrder": True,
+            "routingPreference": "TRAFFIC_AWARE"
         }
+
+        if hora_salida:
+            hoy = datetime.date.today()
+            dt = datetime.datetime.combine(hoy, hora_salida)
+            body["departureTime"] = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
         r = requests.post(url, json=body, headers=headers, timeout=10)
         data = r.json()
 
         if "routes" in data and data["routes"]:
             orden = data["routes"][0].get("optimizedIntermediateWaypointIndex", [])
-            # reincorporar el destino (último punto)
             orden_completo = orden + [len(waypoints_coords) - 1]
             return orden_completo
         else:
@@ -315,7 +317,7 @@ def ordenar_euclidiano(origen, waypoints_coords):
 # ORDENACIÓN ZREP
 # -------------------------------------------------
 
-def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", delegacion="castellon"):
+def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", delegacion="castellon", hora_salida=None):
 
     for col in COLUMNAS_OBLIGATORIAS:
         if col not in df.columns:
@@ -403,7 +405,7 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
         segmento = paradas_unicas[i:i + MAX_WAYPOINTS]
 
         if api_key and len(segmento) >= 2:
-            orden_seg = ordenar_segmento_api(origen_actual, segmento, api_key)
+            orden_seg = ordenar_segmento_api(origen_actual, segmento, api_key, hora_salida)
         else:
             orden_seg = ordenar_euclidiano(origen_actual, segmento)
 
@@ -454,6 +456,7 @@ def reordenar_excel(
     lon_origen: float,
     api_key: str = "",
     delegacion: str = "castellon",
+    hora_salida=None,
 ):
 
     hojas = pd.read_excel(input_path, sheet_name=None)
@@ -470,6 +473,7 @@ def reordenar_excel(
                 lon_origen,
                 api_key=api_key,
                 delegacion=delegacion,
+                hora_salida=hora_salida,
             )
 
             link = generar_link_pueblos(df_ordenado, lat_origen, lon_origen)
