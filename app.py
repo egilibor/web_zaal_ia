@@ -15,6 +15,10 @@ from modulo_valencia_gestores import generar_libros_gestores
 # ==========================================================
 # WORKDIR
 # ==========================================================
+hora_salida = st.sidebar.time_input(
+    "Hora de salida",
+    value=datetime.time(8, 30)
+)
 
 if "workdir" not in st.session_state:
     st.session_state.workdir = Path(tempfile.mkdtemp(prefix="reparto_"))
@@ -81,10 +85,6 @@ if st.sidebar.button("🔄 Cambiar delegación"):
     st.session_state.pop("workdir", None)
     st.rerun()
 
-hora_salida = st.sidebar.time_input(
-    "Hora de salida",
-    value=datetime.time(8, 30)
-    
 # ==========================================================
 # MENÚ HORIZONTAL
 # ==========================================================
