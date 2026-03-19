@@ -27,37 +27,33 @@ SCRIPT_REPARTO = REPO_DIR / "reparto_gpt.py"
 REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
 
 # ==========================================================
-# DELEGACIÓN
+# DELEGACIÓN - PANTALLA DE INICIO
 # ==========================================================
 
-delegacion = st.sidebar.selectbox(
-    "Delegación",
-    ["Castellon", "Valencia"]
-).lower()
-
-hora_salida = st.sidebar.time_input(
-    "Hora de salida",
-    value=datetime.time(8, 30)
-)
-
-# reinicio limpio si cambia delegación
 if "delegacion_activa" not in st.session_state:
-    st.session_state.delegacion_activa = delegacion
+    st.session_state.delegacion_activa = None
 
-if st.session_state.delegacion_activa != delegacion:
-    st.session_state.delegacion_activa = delegacion
+if st.session_state.delegacion_activa is None:
+    st.markdown("## Selecciona la delegación")
+    st.markdown("---")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🏙️ CASTELLÓN", use_container_width=True, type="primary"):
+            st.session_state.delegacion_activa = "castellon"
+            st.rerun()
+    with col2:
+        if st.button("🌆 VALENCIA", use_container_width=True, type="primary"):
+            st.session_state.delegacion_activa = "valencia"
+            st.rerun()
+    st.stop()
+
+delegacion = st.session_state.delegacion_activa
+
+# Botón para cambiar delegación en sidebar
+if st.sidebar.button("🔄 Cambiar delegación"):
+    st.session_state.delegacion_activa = None
     st.session_state.pop("workdir", None)
     st.rerun()
-
-# archivos de coordenadas por delegación
-COORDENADAS_FILES = {
-    "castellon": "Libro_de_Servicio_Castellon_con_coordenadas.xlsx",
-    "valencia": "valencia_municipios_coordenadas.xlsx",
-}
-
-COORDENADAS_REPO = REPO_DIR / COORDENADAS_FILES[delegacion]
-
-st.sidebar.write(f"Delegación activa: {delegacion}")
 
 # ==========================================================
 # WORKDIR
