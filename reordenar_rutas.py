@@ -241,7 +241,7 @@ def cargar_coordenadas(ruta):
 
 import requests
 
-def ordenar_segmento_api(origen, waypoints_coords, api_key, hora_salida=None):
+def ordenar_segmento_api(origen, waypoints_coords, api_key):
     try:
         url = "https://routes.googleapis.com/directions/v2:computeRoutes"
 
@@ -270,11 +270,6 @@ def ordenar_segmento_api(origen, waypoints_coords, api_key, hora_salida=None):
             "travelMode": "DRIVE",
             "optimizeWaypointOrder": True,
         }
-
-        if hora_salida:
-            hoy = datetime.date.today()
-            dt = datetime.datetime.combine(hoy, hora_salida)
-            body["departureTime"] = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
         r = requests.post(url, json=body, headers=headers, timeout=10)
         data = r.json()
