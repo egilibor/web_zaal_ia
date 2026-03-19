@@ -399,7 +399,7 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
         segmento = paradas_unicas[i:i + MAX_WAYPOINTS]
 
         if api_key and len(segmento) >= 2:
-            orden_seg = ordenar_segmento_api(origen_actual, segmento, api_key, hora_salida)
+            orden_seg = ordenar_segmento_api(origen_actual, segmento, api_key)
         else:
             orden_seg = ordenar_euclidiano(origen_actual, segmento)
 
