@@ -11,49 +11,6 @@ from reordenar_rutas import reordenar_excel
 from add_resumen_unico import generar_resumen_unico
 from modulo_valencia_gestores import generar_libros_gestores
 
-# ==========================================================
-# CONFIG
-# ==========================================================
-
-st.set_page_config(page_title="Reparto determinista", layout="wide")
-st.title("Reparto determinista")
-
-if "GOOGLE_MAPS_API_KEY" not in st.secrets:
-    st.error("⚠️ Falta la clave GOOGLE_MAPS_API_KEY en los secrets. Contacta con el administrador.")
-    st.stop()
-
-REPO_DIR = Path(__file__).resolve().parent
-SCRIPT_REPARTO = REPO_DIR / "reparto_gpt.py"
-REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
-
-# ==========================================================
-# DELEGACIÓN - PANTALLA DE INICIO
-# ==========================================================
-
-if "delegacion_activa" not in st.session_state:
-    st.session_state.delegacion_activa = None
-
-if st.session_state.delegacion_activa is None:
-    st.markdown("## Selecciona la delegación")
-    st.markdown("---")
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🏙️ CASTELLÓN", use_container_width=True, type="primary"):
-            st.session_state.delegacion_activa = "castellon"
-            st.rerun()
-    with col2:
-        if st.button("🌆 VALENCIA", use_container_width=True, type="primary"):
-            st.session_state.delegacion_activa = "valencia"
-            st.rerun()
-    st.stop()
-
-delegacion = st.session_state.delegacion_activa
-
-# Botón para cambiar delegación en sidebar
-if st.sidebar.button("🔄 Cambiar delegación"):
-    st.session_state.delegacion_activa = None
-    st.session_state.pop("workdir", None)
-    st.rerun()
 
 # ==========================================================
 # WORKDIR
@@ -74,7 +31,56 @@ with st.sidebar:
         st.session_state.run_id = str(uuid.uuid4())[:8]
         st.rerun()
 
+# ==========================================================
+# CONFIG
+# ==========================================================
+st.set_page_config(page_title="Reparto determinista", layout="wide")
 
+if "GOOGLE_MAPS_API_KEY" not in st.secrets:
+    st.error("⚠️ Falta la clave GOOGLE_MAPS_API_KEY en los secrets. Contacta con el administrador.")
+    st.stop()
+
+REPO_DIR = Path(__file__).resolve().parent
+SCRIPT_REPARTO = REPO_DIR / "reparto_gpt.py"
+REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
+
+# ==========================================================
+# DELEGACIÓN - PANTALLA DE INICIO
+# ==========================================================
+if "delegacion_activa" not in st.session_state:
+    st.session_state.delegacion_activa = None
+
+if st.session_state.delegacion_activa is None:
+    st.markdown("## Selecciona la delegación")
+    st.markdown("---")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🏙️ CASTELLÓN", use_container_width=True, type="primary"):
+            st.session_state.delegacion_activa = "castellon"
+            st.rerun()
+    with col2:
+        if st.button("🌆 VALENCIA", use_container_width=True, type="primary"):
+            st.session_state.delegacion_activa = "valencia"
+            st.rerun()
+    st.stop()
+
+delegacion = st.session_state.delegacion_activa
+
+COORDENADAS_FILES = {
+    "castellon": "Libro_de_Servicio_Castellon_con_coordenadas.xlsx",
+    "valencia": "valencia_municipios_coordenadas.xlsx",
+}
+
+COORDENADAS_REPO = REPO_DIR / COORDENADAS_FILES[delegacion]
+
+st.title(f"Reparto determinista — {delegacion.upper()}")
+
+# Botón para cambiar delegación en sidebar
+if st.sidebar.button("🔄 Cambiar delegación"):
+    st.session_state.delegacion_activa = None
+    st.session_state.pop("workdir", None)
+    st.rerun()
+    
 # ==========================================================
 # MENÚ HORIZONTAL
 # ==========================================================
