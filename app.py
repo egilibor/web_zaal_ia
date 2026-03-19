@@ -3,6 +3,7 @@ import uuid
 import shutil
 import tempfile
 import subprocess
+import datetime
 from pathlib import Path
 
 import streamlit as st
@@ -33,6 +34,11 @@ delegacion = st.sidebar.selectbox(
     "Delegación",
     ["Castellon", "Valencia"]
 ).lower()
+
+hora_salida = st.sidebar.time_input(
+    "Hora de salida",
+    value=datetime.time(8, 30)
+)
 
 # reinicio limpio si cambia delegación
 if "delegacion_activa" not in st.session_state:
@@ -192,6 +198,7 @@ with tab2:
                     lon_origen,
                     api_key=st.secrets["GOOGLE_MAPS_API_KEY"],
                     delegacion=delegacion,
+                    hora_salida=hora_salida,
                 )
                 
  
