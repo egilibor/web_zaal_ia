@@ -333,23 +333,30 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
         lat, lon = (None, None)
 
         if api_key:
-            dir_limpia = str(row['Dirección']).strip()
-            pob_limpia = str(row['Población']).strip()
-            if dir_limpia.upper() not in ("NAN", "NONE", "") and pob_limpia.upper() not in ("NAN", "NONE", ""):
-                provincia = "VALENCIA" if delegacion == "valencia" else "CASTELLON"
-                cp_limpio = str(row.get('C.P.', '')).strip()
-                if cp_limpio.upper() not in ("NAN", "NONE", ""):
-                    direccion_completa = f"{dir_limpia}, {cp_limpio} {pob_limpia}, {provincia}, ESPAÑA"
-                else:
-                    direccion_completa = f"{dir_limpia}, {pob_limpia}, {provincia}, ESPAÑA"
-                lat, lon = geocodificar(direccion_completa, api_key)
-
-        if (lat is None or lon is None) and pueblo_norm in coords:
-            lat, lon = coords[pueblo_norm]
-
-        if pd.notna(lat) and pd.notna(lon):
-            df.at[idx, "Latitud"] = lat
-            df.at[idx, "Longitud"] = lon
+        dir_limpia = str(row['Dirección']).strip()
+        pob_limpia = str(row['Población']).strip()
+        if dir_limpia.upper() not in ("NAN", "NONE", "") and pob_limpia.upper() not in ("NAN", "NONE", ""):
+            provincia = "VALENCIA" if delegacion == "valencia" else "CASTELLON"
+            cp_limpio = str(row.get('C.P.', '')).strip()
+            if cp_limpio.upper() not in ("NAN", "NONE", ""):
+                direccion_completa = f"{dir_limpia}, {cp_limpio} {pob_limpia}, {provincia}, ESPAÑA"
+            else:
+                direccion_completa = f"{dir_limpia}, {pob_limpia}, {provincia}, ESPAÑA"
+            lat, lon = geocodificar(direccion_completa, api_key)
+    
+            # Validar proximidad al municipio esperado
+            if lat is not None and lon is not None and pueblo_norm in coords:
+                lat_ref, lon_ref = coords[pueblo_norm]
+                distancia_ref = ((lat - lat_ref) ** 2 + (lon - lon_ref) ** 2) ** 0.5
+                if distancia_ref > 0.5:
+                    lat, lon = None, None
+    
+    if (lat is None or lon is None) and pueblo_norm in coords:
+        lat, lon = coords[pueblo_norm]
+    
+    if pd.notna(lat) and pd.notna(lon):
+        df.at[idx, "Latitud"] = lat
+        df.at[idx, "Longitud"] = lon
 
     # -------------------------------------------------
     # SEPARAR FILAS CON Y SIN COORDENADAS
