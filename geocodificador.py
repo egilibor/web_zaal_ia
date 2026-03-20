@@ -59,3 +59,9 @@ def geocodificar(direccion: str, api_key: str) -> tuple:
 
     conn.close()
     return (None, None)
+
+def limpiar_cache():
+    conn = _get_connection()
+    conn.execute("DELETE FROM geocache")
+    conn.commit()
+    conn.close()
