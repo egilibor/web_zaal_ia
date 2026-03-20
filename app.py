@@ -10,7 +10,7 @@ import streamlit as st
 from reordenar_rutas import reordenar_excel
 from add_resumen_unico import generar_resumen_unico
 from modulo_valencia_gestores import generar_libros_gestores
-
+from geocodificador import limpiar_cache
 
 # ==========================================================
 # WORKDIR
@@ -35,7 +35,6 @@ with st.sidebar:
         st.session_state.run_id = str(uuid.uuid4())[:8]
         st.rerun()
     if st.button("🗑️ Limpiar caché geocodificación"):
-        from geocodificador import limpiar_cache
         limpiar_cache()
         st.success("Caché limpiada correctamente")
 # ==========================================================
