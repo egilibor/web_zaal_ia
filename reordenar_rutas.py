@@ -256,28 +256,24 @@ def ordenar_segmento_api(origen, waypoints_coords, api_key):
                 "location": {"latLng": {"latitude": origen[0], "longitude": origen[1]}}
             },
             "destination": {
-                "location": {"latLng": {
-                    "latitude": waypoints_coords[-1][0],
-                    "longitude": waypoints_coords[-1][1]
-                }}
+                "location": {"latLng": {"latitude": origen[0], "longitude": origen[1]}}
             },
             "intermediates": [
                 {
                     "location": {"latLng": {"latitude": lat, "longitude": lon}}
                 }
-                for lat, lon in waypoints_coords[:-1]
+                for lat, lon in waypoints_coords
             ],
             "travelMode": "DRIVE",
-            "optimizeWaypointOrder": True,
+            "optimizeWaypointOrder": True
         }
-
+        
         r = requests.post(url, json=body, headers=headers, timeout=10)
         data = r.json()
 
         if "routes" in data and data["routes"]:
             orden = data["routes"][0].get("optimizedIntermediateWaypointIndex", [])
-            orden_completo = orden + [len(waypoints_coords) - 1]
-            return orden_completo
+            return orden
         else:
             print(f"DEBUG Routes API sin resultado: {data}")
 
