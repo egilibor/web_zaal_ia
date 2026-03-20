@@ -34,7 +34,10 @@ with st.sidebar:
         st.session_state.workdir = Path(tempfile.mkdtemp(prefix="reparto_"))
         st.session_state.run_id = str(uuid.uuid4())[:8]
         st.rerun()
-
+    if st.button("🗑️ Limpiar caché geocodificación"):
+        from geocodificador import limpiar_cache
+        limpiar_cache()
+        st.success("Caché limpiada correctamente")
 # ==========================================================
 # CONFIG
 # ==========================================================
