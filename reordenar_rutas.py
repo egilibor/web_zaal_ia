@@ -7,7 +7,7 @@ from openpyxl.styles import PatternFill
 import pandas as pd
 import re
 import googlemaps
-import requests 
+import requests
 import datetime
 
 # -------------------------------------------------
@@ -236,10 +236,27 @@ def cargar_coordenadas(ruta):
 
 
 # -------------------------------------------------
-# ORDENACIÓN CON DIRECTIONS API (optimize_waypoints)
+# BUSCAR COORDENADAS DE REFERENCIA
 # -------------------------------------------------
 
-import requests
+def buscar_coords_referencia(pueblo_norm, coords):
+    """
+    Busca coordenadas de referencia para validar la geocodificación.
+    Primero búsqueda exacta, luego parcial.
+    """
+    if pueblo_norm in coords:
+        return coords[pueblo_norm]
+
+    for key in coords:
+        if pueblo_norm in key or key in pueblo_norm:
+            return coords[key]
+
+    return None
+
+
+# -------------------------------------------------
+# ORDENACIÓN CON ROUTES API
+# -------------------------------------------------
 
 def ordenar_segmento_api(origen, waypoints_coords, api_key):
     try:
@@ -267,7 +284,7 @@ def ordenar_segmento_api(origen, waypoints_coords, api_key):
             "travelMode": "DRIVE",
             "optimizeWaypointOrder": True
         }
-        
+
         r = requests.post(url, json=body, headers=headers, timeout=10)
         data = r.json()
 
@@ -282,6 +299,7 @@ def ordenar_segmento_api(origen, waypoints_coords, api_key):
         raise
 
     return list(range(len(waypoints_coords)))
+
 
 def ordenar_euclidiano(origen, waypoints_coords):
     """Nearest-neighbor con distancia euclidiana como fallback."""
@@ -322,6 +340,7 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
     # -------------------------------------------------
     for idx, row in df.iterrows():
         pueblo_norm = normalizar_texto(row["Población"])
+        cp = str(row.get('C.P.', '')).strip()
         lat, lon = (None, None)
 
         if api_key:
@@ -329,27 +348,31 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
             pob_limpia = str(row['Población']).strip()
             if dir_limpia.upper() not in ("NAN", "NONE", "") and pob_limpia.upper() not in ("NAN", "NONE", ""):
                 provincia = "VALENCIA" if delegacion == "valencia" else "CASTELLON"
-                cp_limpio = str(row.get('C.P.', '')).strip()
-                if cp_limpio.upper() not in ("NAN", "NONE", ""):
-                    direccion_completa = f"{dir_limpia}, {cp_limpio} {pob_limpia}, {provincia}, ESPAÑA"
+                if cp.upper() not in ("NAN", "NONE", ""):
+                    direccion_completa = f"{dir_limpia}, {cp} {pob_limpia}, {provincia}, ESPAÑA"
                 else:
                     direccion_completa = f"{dir_limpia}, {pob_limpia}, {provincia}, ESPAÑA"
                 lat, lon = geocodificar(direccion_completa, api_key)
 
                 # Validar proximidad al municipio esperado
-                if lat is not None and lon is not None and pueblo_norm in coords:
-                    lat_ref, lon_ref = coords[pueblo_norm]
-                    distancia_ref = ((lat - lat_ref) ** 2 + (lon - lon_ref) ** 2) ** 0.5
-                    if distancia_ref > 0.05:
-                        lat, lon = None, None
+                if lat is not None and lon is not None:
+                    coords_ref = buscar_coords_referencia(pueblo_norm, coords)
+                    if coords_ref is not None:
+                        lat_ref, lon_ref = coords_ref
+                        distancia_ref = ((lat - lat_ref) ** 2 + (lon - lon_ref) ** 2) ** 0.5
+                        if distancia_ref > 0.1:
+                            lat, lon = None, None
 
-        if (lat is None or lon is None) and pueblo_norm in coords:
-            lat, lon = coords[pueblo_norm]
+        # Fallback: coordenadas del municipio
+        if (lat is None or lon is None):
+            coords_ref = buscar_coords_referencia(pueblo_norm, coords)
+            if coords_ref is not None:
+                lat, lon = coords_ref
 
         if pd.notna(lat) and pd.notna(lon):
             df.at[idx, "Latitud"] = lat
             df.at[idx, "Longitud"] = lon
-            
+
     # -------------------------------------------------
     # SEPARAR FILAS CON Y SIN COORDENADAS
     # -------------------------------------------------
@@ -370,8 +393,8 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
     # AGRUPAR EN PARADAS ÚNICAS POR PROXIMIDAD
     # -------------------------------------------------
     UMBRAL = 0.0009  # ~100 metros
-    paradas_unicas = []      # lista de (lat, lon)
-    idx_por_parada = []      # lista de listas de índices por parada
+    paradas_unicas = []
+    idx_por_parada = []
 
     for idx, lat, lon in filas_con_coord:
         asignada = False
@@ -385,7 +408,7 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
             idx_por_parada.append([idx])
 
     # -------------------------------------------------
-    # ORDENAR PARADAS (Directions API o fallback euclidiano)
+    # ORDENAR PARADAS (Routes API o fallback euclidiano)
     # -------------------------------------------------
     MAX_WAYPOINTS = 25
     orden_paradas = []
@@ -400,8 +423,6 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
             orden_seg = ordenar_euclidiano(origen_actual, segmento)
 
         orden_paradas.extend([i + o for o in orden_seg])
-
-        # el origen del siguiente segmento es la última parada de este
         origen_actual = paradas_unicas[i + orden_seg[-1]]
 
     # -------------------------------------------------
@@ -454,7 +475,7 @@ def reordenar_excel(
     hojas_resultado = {}
 
     for nombre, df in hojas.items():
-        
+
         if nombre.startswith("ZREP_") or nombre in ("HOSPITALES", "FEDERACION"):
             df_ordenado = ordenar_dataframe_zrep(
                 df,
@@ -513,7 +534,7 @@ def reordenar_excel(
     # Construir enlaces de navegación por hoja
     hojas_navegacion = {}
     for nombre, df in hojas_resultado.items():
-        if not nombre.startswith("ZREP_"):
+        if not nombre.startswith("ZREP_") and nombre not in ("HOSPITALES", "FEDERACION"):
             continue
         if "Latitud" not in df.columns or "Longitud" not in df.columns:
             continue
@@ -528,9 +549,10 @@ def reordenar_excel(
         for nombre, df in hojas_resultado.items():
             df.to_excel(writer, sheet_name=nombre, index=False)
 
-    # Añadir filas de navegación al principio de cada hoja ZREP
+    # Añadir filas de navegación al principio de cada hoja
     from openpyxl import load_workbook
     from openpyxl.styles import Font
+    from openpyxl.utils import quote_sheetname
 
     wb = load_workbook(output_path)
 
@@ -546,6 +568,14 @@ def reordenar_excel(
             ws.cell(row=2 + i, column=1).value = f"SEGMENTO {i + 1}"
             ws.cell(row=2 + i, column=2).value = link
             ws.cell(row=2 + i, column=2).font = Font(color="0000FF", underline="single")
+
+        # Enlace de regreso a RESUMEN_UNICO en la última fila de navegación
+        ultima_fila_nav = 1 + len(datos["segmentos"])
+        cell_back = ws.cell(row=ultima_fila_nav, column=3)
+        cell_back.value = "← RESUMEN"
+        cell_back.hyperlink = f"#{quote_sheetname('RESUMEN_UNICO')}!A1"
+        cell_back.font = Font(color="FFFFFF", bold=True)
+        cell_back.fill = PatternFill(start_color="FF6600", end_color="FF6600", fill_type="solid")
 
     azul_claro = PatternFill(start_color="DDEEFF", end_color="DDEEFF", fill_type="solid")
 
