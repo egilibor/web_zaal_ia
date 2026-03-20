@@ -414,6 +414,12 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
     orden_paradas = []
     origen_actual = (lat_origen, lon_origen)
 
+    # Pre-ordenar con euclidiano si hay más paradas que el límite de la API
+    if len(paradas_unicas) > MAX_WAYPOINTS:
+        orden_previo = ordenar_euclidiano((lat_origen, lon_origen), paradas_unicas)
+        paradas_unicas = [paradas_unicas[i] for i in orden_previo]
+        idx_por_parada = [idx_por_parada[i] for i in orden_previo]
+        
     for i in range(0, len(paradas_unicas), MAX_WAYPOINTS):
         segmento = paradas_unicas[i:i + MAX_WAYPOINTS]
 
