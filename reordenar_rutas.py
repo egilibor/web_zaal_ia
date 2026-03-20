@@ -459,7 +459,7 @@ def reordenar_excel(
 
     for nombre, df in hojas.items():
         
-        if nombre.startswith("ZREP_"):
+        if nombre.startswith("ZREP_") or nombre in ("HOSPITALES", "FEDERACION"):
             df_ordenado = ordenar_dataframe_zrep(
                 df,
                 coords,
