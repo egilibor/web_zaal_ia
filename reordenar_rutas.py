@@ -340,7 +340,7 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
                 if lat is not None and lon is not None and pueblo_norm in coords:
                     lat_ref, lon_ref = coords[pueblo_norm]
                     distancia_ref = ((lat - lat_ref) ** 2 + (lon - lon_ref) ** 2) ** 0.5
-                    if distancia_ref > 0.5:
+                    if distancia_ref > 0.05:
                         lat, lon = None, None
 
         if (lat is None or lon is None) and pueblo_norm in coords:
