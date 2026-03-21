@@ -91,7 +91,7 @@ if st.sidebar.button("🔄 Cambiar delegación"):
 # MENÚ HORIZONTAL
 # ==========================================================
 
-tab1, tab2 = st.tabs([
+tab1, tab2, tab3 = st.tabs([
     "FASE 1 · Asignación reparto",
     "FASE 2 . Ajuste Manual",
     "FASE 2 · Reordenación topográfica"
@@ -161,10 +161,10 @@ with tab1:
 
 
 # ==========================================================
-# FASE 2
+# FASE 3
 # ==========================================================
 
-with tab2:
+with tab3:
 
     st.subheader("Reordenar rutas existentes")
 
