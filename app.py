@@ -222,14 +222,23 @@ with tab2:
 
             st.markdown(f"**{hoja_origen}** — {len(df_origen)} expediciones")
 
-            seleccionar_todas = st.checkbox("Seleccionar todas", key="chk_master")
+            if st.checkbox("Seleccionar todas", key="chk_master"):
+                for idx in df_origen.index:
+                    st.session_state[f"chk_{idx}"] = True
+            else:
+                for idx in df_origen.index:
+                    if f"chk_{idx}" not in st.session_state:
+                        st.session_state[f"chk_{idx}"] = False
 
             seleccion = {}
             for idx, row in df_origen.iterrows():
                 etiqueta = " · ".join(
                     str(row[c]) for c in columnas_mostrar if pd.notna(row.get(c))
                 )
-                seleccion[idx] = st.checkbox(etiqueta, value=seleccionar_todas, key=f"chk_{idx}")
+                seleccion[idx] = st.checkbox(
+                    etiqueta,
+                    key=f"chk_{idx}"
+                )
 
             indices_seleccionados = [idx for idx, marcado in seleccion.items() if marcado]
             st.markdown(f"*{len(indices_seleccionados)} expedición(es) seleccionada(s)*")
