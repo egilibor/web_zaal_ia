@@ -176,7 +176,6 @@ with tab2:
 
     if excel_ajuste:
 
-        # ── Cargar en session_state solo si es un archivo nuevo ──
         file_id = excel_ajuste.name + str(excel_ajuste.size)
         if st.session_state.get("ajuste_file_id") != file_id:
             ajuste_path = workdir / "ajuste_entrada.xlsx"
@@ -184,7 +183,6 @@ with tab2:
             wb = load_workbook(ajuste_path)
             st.session_state["ajuste_wb"] = wb
             st.session_state["ajuste_file_id"] = file_id
-            st.session_state["ajuste_confirmacion"] = False
 
         wb = st.session_state["ajuste_wb"]
         hojas_disponibles = wb.sheetnames
@@ -199,20 +197,11 @@ with tab2:
             col_iz, col_der = st.columns(2)
 
             with col_iz:
-                hoja_origen = st.selectbox(
-                    "Hoja origen",
-                    hojas_operativas,
-                    key="hoja_origen"
-                )
+                hoja_origen = st.selectbox("Hoja origen", hojas_operativas, key="hoja_origen")
             with col_der:
                 hojas_destino = [h for h in hojas_operativas if h != hoja_origen]
-                hoja_destino = st.selectbox(
-                    "Hoja destino",
-                    hojas_destino,
-                    key="hoja_destino"
-                )
+                hoja_destino = st.selectbox("Hoja destino", hojas_destino, key="hoja_destino")
 
-            # ── Leer hoja origen y destino desde el workbook en memoria ──
             def ws_to_df(wb, nombre):
                 ws = wb[nombre]
                 datos = list(ws.values)
@@ -228,11 +217,9 @@ with tab2:
                 if c in df_origen.columns
             ]
 
-            # ── Vista previa hoja destino ──
             with st.expander(f"Ver hoja destino: {hoja_destino} ({len(df_destino)} expediciones)"):
                 st.dataframe(df_destino[columnas_mostrar] if columnas_mostrar else df_destino, use_container_width=True)
 
-            # ── Selector maestro + checkboxes ──
             st.markdown(f"**{hoja_origen}** — {len(df_origen)} expediciones")
 
             seleccionar_todas = st.checkbox("Seleccionar todas", key="chk_master")
@@ -242,31 +229,45 @@ with tab2:
                 etiqueta = " · ".join(
                     str(row[c]) for c in columnas_mostrar if pd.notna(row.get(c))
                 )
-                seleccion[idx] = st.checkbox(
-                    etiqueta,
-                    value=seleccionar_todas,
-                    key=f"chk_{idx}"
-                )
+                seleccion[idx] = st.checkbox(etiqueta, value=seleccionar_todas, key=f"chk_{idx}")
 
             indices_seleccionados = [idx for idx, marcado in seleccion.items() if marcado]
             st.markdown(f"*{len(indices_seleccionados)} expedición(es) seleccionada(s)*")
 
-            # ── Botón mover con confirmación ──
             if indices_seleccionados:
+                if st.button(f"Mover {len(indices_seleccionados)} exp. → {hoja_destino}", key="btn_mover"):
 
-                if not st.session_state.get("ajuste_confirmacion"):
-                    if st.button(f"Mover {len(indices_seleccionados)} exp. → {hoja_destino}", key="btn_mover"):
-                        st.session_state["ajuste_confirmacion"] = True
-                        st.session_state["ajuste_indices"] = indices_seleccionados
-                        st.session_state["ajuste_origen"] = hoja_origen
-                        st.session_state["ajuste_destino"] = hoja_destino
-                        st.rerun()
+                    from openpyxl.utils.dataframe import dataframe_to_rows
 
-                else:
-                    n = len(st.session_state["ajuste_indices"])
-                    orig = st.session_state["ajuste_origen"]
-                    dest = st.session_state["ajuste_destino"]
-                    st.warning(f"¿Confirmas mover {n} expedición(es) de '{orig}' a '{dest}'?")
+                    df_src = ws_to_df(wb, hoja_origen)
+                    df_dst = ws_to_df(wb, hoja_destino)
+
+                    filas_a_mover = df_src.loc[indices_seleccionados]
+                    df_src_nuevo = df_src.drop(index=indices_seleccionados).reset_index(drop=True)
+                    df_dst_nuevo = pd.concat([df_dst, filas_a_mover], ignore_index=True)
+
+                    for nombre_hoja, df_nuevo in [(hoja_origen, df_src_nuevo), (hoja_destino, df_dst_nuevo)]:
+                        ws = wb[nombre_hoja]
+                        ws.delete_rows(1, ws.max_row)
+                        for r in dataframe_to_rows(df_nuevo, index=False, header=True):
+                            ws.append(r)
+
+                    st.session_state["ajuste_wb"] = wb
+                    st.success(f"{len(indices_seleccionados)} expedición(es) movidas de '{hoja_origen}' a '{hoja_destino}'")
+                    st.rerun()
+
+            ajuste_salida = workdir / "ajuste_salida.xlsx"
+            wb.save(ajuste_salida)
+            st.download_button(
+                "⬇️ Descargar Excel modificado",
+                data=ajuste_salida.read_bytes(),
+                file_name="ajuste_salida.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="btn_descarga_ajuste"
+            )
+
+    else:
+        st.info("Sube el salida.xlsx de la Fase 1 para hacer ajustes manuales.")
         
 # ==========================================================
 # FASE 3
@@ -384,7 +385,5 @@ with tab3:
 
         st.info("Sube el archivo para activar la reordenación.")
 
-# ==========================================================
-# FASE 3
-# ==========================================================
+
 
