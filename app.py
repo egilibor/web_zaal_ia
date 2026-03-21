@@ -159,6 +159,9 @@ with tab1:
     else:
         st.info("Sube un CSV para habilitar la ejecución.")
 
+# ==========================================================
+# FASE 2
+# ==========================================================
 with tab2:
 
     st.subheader("Ajuste manual de expediciones")
@@ -173,8 +176,8 @@ with tab2:
 
         ajuste_path = workdir / "ajuste_entrada.xlsx"
         ajuste_path.write_bytes(excel_ajuste.getbuffer())
-
-        hojas_disponibles = pd.ExcelFile(ajuste_path).sheet_names
+        hojas_disponibles = pd.ExcelFile(ajuste_path, engine="openpyxl").sheet_names
+        #hojas_disponibles = pd.ExcelFile(ajuste_path).sheet_names
         hojas_operativas = [
             h for h in hojas_disponibles
             if h.startswith("ZREP_") or h in ("HOSPITALES", "FEDERACION")
