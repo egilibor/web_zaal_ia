@@ -265,7 +265,7 @@ with tab2:
                     n = len(st.session_state["ajuste_indices"])
                     orig = st.session_state["ajuste_origen"]
                     dest = st.session_state["ajuste_destino"]
-                    st.warning(f"¿Confirmas mover **{n} expedición(es)** de **{orig}** a
+                    st.warning(f"¿Confirmas mover {n} expedición(es) de '{orig}' a '{dest}'?")
         
 # ==========================================================
 # FASE 3
