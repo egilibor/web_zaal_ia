@@ -159,7 +159,116 @@ with tab1:
     else:
         st.info("Sube un CSV para habilitar la ejecución.")
 
+with tab2:
 
+    st.subheader("Ajuste manual de expediciones")
+
+    excel_ajuste = st.file_uploader(
+        "Subir salida.xlsx (generado en Fase 1)",
+        type=["xlsx"],
+        key="fase2_ajuste_excel"
+    )
+
+    if excel_ajuste:
+
+        ajuste_path = workdir / "ajuste_entrada.xlsx"
+        ajuste_path.write_bytes(excel_ajuste.getbuffer())
+
+        hojas_disponibles = pd.ExcelFile(ajuste_path).sheet_names
+        hojas_operativas = [
+            h for h in hojas_disponibles
+            if h.startswith("ZREP_") or h in ("HOSPITALES", "FEDERACION")
+        ]
+
+        if not hojas_operativas:
+            st.warning("No se encontraron hojas operativas (ZREP_, HOSPITALES, FEDERACION).")
+        else:
+            col_iz, col_der = st.columns(2)
+
+            with col_iz:
+                hoja_origen = st.selectbox(
+                    "Hoja origen",
+                    hojas_operativas,
+                    key="hoja_origen"
+                )
+
+            with col_der:
+                hojas_destino = [h for h in hojas_operativas if h != hoja_origen]
+                hoja_destino = st.selectbox(
+                    "Hoja destino",
+                    hojas_destino,
+                    key="hoja_destino"
+                )
+
+            if hoja_origen and hoja_destino:
+
+                df_origen = pd.read_excel(ajuste_path, sheet_name=hoja_origen, dtype=str)
+
+                st.markdown(f"**{hoja_origen}** — {len(df_origen)} expediciones")
+
+                columnas_mostrar = [
+                    c for c in ["Exp", "Consignatario", "Población", "Dirección", "Kgs"]
+                    if c in df_origen.columns
+                ]
+
+                seleccion = {}
+                for idx, row in df_origen.iterrows():
+                    etiqueta = " · ".join(
+                        str(row[c]) for c in columnas_mostrar if pd.notna(row.get(c))
+                    )
+                    seleccion[idx] = st.checkbox(etiqueta, key=f"chk_{idx}")
+
+                indices_seleccionados = [idx for idx, marcado in seleccion.items() if marcado]
+
+                st.markdown(f"*{len(indices_seleccionados)} expedición(es) seleccionada(s)*")
+
+                if indices_seleccionados and st.button(
+                    f"Mover a {hoja_destino}",
+                    key="btn_mover"
+                ):
+                    from openpyxl import load_workbook
+
+                    wb = load_workbook(ajuste_path)
+
+                    # Leer hojas como DataFrames
+                    df_src = pd.read_excel(ajuste_path, sheet_name=hoja_origen, dtype=str)
+                    df_dst = pd.read_excel(ajuste_path, sheet_name=hoja_destino, dtype=str)
+
+                    filas_a_mover = df_src.loc[indices_seleccionados]
+                    df_src_nuevo = df_src.drop(index=indices_seleccionados).reset_index(drop=True)
+                    df_dst_nuevo = pd.concat([df_dst, filas_a_mover], ignore_index=True)
+
+                    # Reescribir las dos hojas en el workbook
+                    from openpyxl.utils.dataframe import dataframe_to_rows
+
+                    for nombre_hoja, df_nuevo in [
+                        (hoja_origen, df_src_nuevo),
+                        (hoja_destino, df_dst_nuevo)
+                    ]:
+                        ws = wb[nombre_hoja]
+                        ws.delete_rows(1, ws.max_row)
+                        for r in dataframe_to_rows(df_nuevo, index=False, header=True):
+                            ws.append(r)
+
+                    ajuste_salida = workdir / "ajuste_salida.xlsx"
+                    wb.save(ajuste_salida)
+
+                    st.success(
+                        f"{len(indices_seleccionados)} expedición(es) movidas "
+                        f"de **{hoja_origen}** a **{hoja_destino}**"
+                    )
+
+                    st.download_button(
+                        "Descargar Excel modificado",
+                        data=ajuste_salida.read_bytes(),
+                        file_name="ajuste_salida.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="btn_descarga_ajuste"
+                    )
+
+    else:
+        st.info("Sube el salida.xlsx de la Fase 1 para hacer ajustes manuales.")
+        
 # ==========================================================
 # FASE 3
 # ==========================================================
