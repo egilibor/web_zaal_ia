@@ -222,13 +222,24 @@ with tab2:
 
             st.markdown(f"**{hoja_origen}** — {len(df_origen)} expediciones")
 
-            if st.checkbox("Seleccionar todas", key="chk_master"):
+            master_actual = st.checkbox("Seleccionar todas", key="chk_master")
+            master_anterior = st.session_state.get("chk_master_prev", False)
+            
+            if master_actual and not master_anterior:
+                # Primera pulsación → marcar todo
                 for idx in df_origen.index:
                     st.session_state[f"chk_{idx}"] = True
+            elif not master_actual and master_anterior:
+                # Segunda pulsación (desmarcar master) → desmarcar todo
+                for idx in df_origen.index:
+                    st.session_state[f"chk_{idx}"] = False
             else:
+                # Estado inicial: inicializar los que no existen
                 for idx in df_origen.index:
                     if f"chk_{idx}" not in st.session_state:
                         st.session_state[f"chk_{idx}"] = False
+            
+            st.session_state["chk_master_prev"] = master_actual
 
             seleccion = {}
             for idx, row in df_origen.iterrows():
