@@ -93,15 +93,9 @@ if st.sidebar.button("🔄 Cambiar delegación"):
 
 tab1, tab2 = st.tabs([
     "FASE 1 · Asignación reparto",
+    "FASE 2 . Ajuste Manual",
     "FASE 2 · Reordenación topográfica"
 ])
-
-
-#tab1, tab2, tab3 = st.tabs([
-#    "FASE 1 · Asignación reparto",
-#    "FASE 2 · Reordenación topográfica",
-#    #"FASE 3 · Callejero"
-#])
 
 
 # ==========================================================
