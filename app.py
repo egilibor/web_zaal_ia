@@ -175,10 +175,18 @@ with tab2:
 
     if excel_ajuste:
 
-        ajuste_path = workdir / "ajuste_entrada.xlsx"
-        ajuste_path.write_bytes(excel_ajuste.getbuffer())
-        hojas_disponibles = pd.ExcelFile(ajuste_path, engine="openpyxl").sheet_names
-        #hojas_disponibles = pd.ExcelFile(ajuste_path).sheet_names
+        # ── Cargar en session_state solo si es un archivo nuevo ──
+        file_id = excel_ajuste.name + str(excel_ajuste.size)
+        if st.session_state.get("ajuste_file_id") != file_id:
+            ajuste_path = workdir / "ajuste_entrada.xlsx"
+            ajuste_path.write_bytes(excel_ajuste.getbuffer())
+            wb = load_workbook(ajuste_path)
+            st.session_state["ajuste_wb"] = wb
+            st.session_state["ajuste_file_id"] = file_id
+            st.session_state["ajuste_confirmacion"] = False
+
+        wb = st.session_state["ajuste_wb"]
+        hojas_disponibles = wb.sheetnames
         hojas_operativas = [
             h for h in hojas_disponibles
             if h.startswith("ZREP_") or h in ("HOSPITALES", "FEDERACION")
@@ -195,7 +203,6 @@ with tab2:
                     hojas_operativas,
                     key="hoja_origen"
                 )
-
             with col_der:
                 hojas_destino = [h for h in hojas_operativas if h != hoja_origen]
                 hoja_destino = st.selectbox(
@@ -204,74 +211,61 @@ with tab2:
                     key="hoja_destino"
                 )
 
-            if hoja_origen and hoja_destino:
+            # ── Leer hoja origen y destino desde el workbook en memoria ──
+            def ws_to_df(wb, nombre):
+                ws = wb[nombre]
+                datos = list(ws.values)
+                if not datos:
+                    return pd.DataFrame()
+                return pd.DataFrame(datos[1:], columns=datos[0])
 
-                df_origen = pd.read_excel(ajuste_path, sheet_name=hoja_origen, dtype=str)
+            df_origen = ws_to_df(wb, hoja_origen)
+            df_destino = ws_to_df(wb, hoja_destino)
 
-                st.markdown(f"**{hoja_origen}** — {len(df_origen)} expediciones")
+            columnas_mostrar = [
+                c for c in ["Exp", "Consignatario", "Población", "Dirección", "Kgs"]
+                if c in df_origen.columns
+            ]
 
-                columnas_mostrar = [
-                    c for c in ["Exp", "Consignatario", "Población", "Dirección", "Kgs"]
-                    if c in df_origen.columns
-                ]
+            # ── Vista previa hoja destino ──
+            with st.expander(f"Ver hoja destino: {hoja_destino} ({len(df_destino)} expediciones)"):
+                st.dataframe(df_destino[columnas_mostrar] if columnas_mostrar else df_destino, use_container_width=True)
 
-                seleccion = {}
-                for idx, row in df_origen.iterrows():
-                    etiqueta = " · ".join(
-                        str(row[c]) for c in columnas_mostrar if pd.notna(row.get(c))
-                    )
-                    seleccion[idx] = st.checkbox(etiqueta, key=f"chk_{idx}")
+            # ── Selector maestro + checkboxes ──
+            st.markdown(f"**{hoja_origen}** — {len(df_origen)} expediciones")
 
-                indices_seleccionados = [idx for idx, marcado in seleccion.items() if marcado]
+            seleccionar_todas = st.checkbox("Seleccionar todas", key="chk_master")
 
-                st.markdown(f"*{len(indices_seleccionados)} expedición(es) seleccionada(s)*")
+            seleccion = {}
+            for idx, row in df_origen.iterrows():
+                etiqueta = " · ".join(
+                    str(row[c]) for c in columnas_mostrar if pd.notna(row.get(c))
+                )
+                seleccion[idx] = st.checkbox(
+                    etiqueta,
+                    value=seleccionar_todas,
+                    key=f"chk_{idx}"
+                )
 
-                if indices_seleccionados and st.button(
-                    f"Mover a {hoja_destino}",
-                    key="btn_mover"
-                ):
-                    from openpyxl import load_workbook
+            indices_seleccionados = [idx for idx, marcado in seleccion.items() if marcado]
+            st.markdown(f"*{len(indices_seleccionados)} expedición(es) seleccionada(s)*")
 
-                    wb = load_workbook(ajuste_path)
+            # ── Botón mover con confirmación ──
+            if indices_seleccionados:
 
-                    # Leer hojas como DataFrames
-                    df_src = pd.read_excel(ajuste_path, sheet_name=hoja_origen, dtype=str)
-                    df_dst = pd.read_excel(ajuste_path, sheet_name=hoja_destino, dtype=str)
+                if not st.session_state.get("ajuste_confirmacion"):
+                    if st.button(f"Mover {len(indices_seleccionados)} exp. → {hoja_destino}", key="btn_mover"):
+                        st.session_state["ajuste_confirmacion"] = True
+                        st.session_state["ajuste_indices"] = indices_seleccionados
+                        st.session_state["ajuste_origen"] = hoja_origen
+                        st.session_state["ajuste_destino"] = hoja_destino
+                        st.rerun()
 
-                    filas_a_mover = df_src.loc[indices_seleccionados]
-                    df_src_nuevo = df_src.drop(index=indices_seleccionados).reset_index(drop=True)
-                    df_dst_nuevo = pd.concat([df_dst, filas_a_mover], ignore_index=True)
-
-                    # Reescribir las dos hojas en el workbook
-                    from openpyxl.utils.dataframe import dataframe_to_rows
-
-                    for nombre_hoja, df_nuevo in [
-                        (hoja_origen, df_src_nuevo),
-                        (hoja_destino, df_dst_nuevo)
-                    ]:
-                        ws = wb[nombre_hoja]
-                        ws.delete_rows(1, ws.max_row)
-                        for r in dataframe_to_rows(df_nuevo, index=False, header=True):
-                            ws.append(r)
-
-                    ajuste_salida = workdir / "ajuste_salida.xlsx"
-                    wb.save(ajuste_salida)
-
-                    st.success(
-                        f"{len(indices_seleccionados)} expedición(es) movidas "
-                        f"de **{hoja_origen}** a **{hoja_destino}**"
-                    )
-
-                    st.download_button(
-                        "Descargar Excel modificado",
-                        data=ajuste_salida.read_bytes(),
-                        file_name="ajuste_salida.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        key="btn_descarga_ajuste"
-                    )
-
-    else:
-        st.info("Sube el salida.xlsx de la Fase 1 para hacer ajustes manuales.")
+                else:
+                    n = len(st.session_state["ajuste_indices"])
+                    orig = st.session_state["ajuste_origen"]
+                    dest = st.session_state["ajuste_destino"]
+                    st.warning(f"¿Confirmas mover **{n} expedición(es)** de **{orig}** a
         
 # ==========================================================
 # FASE 3
