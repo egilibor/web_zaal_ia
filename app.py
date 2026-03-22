@@ -279,8 +279,7 @@ with tab2:
                     seleccion[idx] = st.checkbox(etiqueta_base, key=f"chk_{idx}")
                 with col_det:
                     if etiqueta_detalle:
-                        
-            st.markdown(f"<small>{etiqueta_detalle}</small>", unsafe_allow_html=True)
+                        st.markdown(f"<small>{etiqueta_detalle}</small>", unsafe_allow_html=True)
 
             indices_seleccionados = [idx for idx, marcado in seleccion.items() if marcado]
             st.markdown(f"*{len(indices_seleccionados)} expedición(es) seleccionada(s)*")
