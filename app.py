@@ -323,11 +323,17 @@ with tab2:
                             ws_b = wb.create_sheet(title=nombre_b)
                         for r in dataframe_to_rows(filas_b, index=False, header=True):
                             ws_b.append(r)
-                        st.session_state["ajuste_wb"] = wb
+                        from openpyxl import Workbook as WB2
+                        wb_nuevo = WB2()
+                        wb_nuevo.remove(wb_nuevo.active)
+                        for nombre_hoja in wb.sheetnames:
+                            ws_orig = wb[nombre_hoja]
+                            ws_nuevo = wb_nuevo.create_sheet(title=nombre_hoja)
+                            for row in ws_orig.iter_rows(values_only=True):
+                                ws_nuevo.append(list(row) if row else [])
+                        st.session_state["ajuste_wb"] = wb_nuevo
                         ajuste_salida = workdir / "ajuste_salida.xlsx"
-                        wb.defined_names = wb.defined_names.__class__()
-                        ajuste_salida = workdir / "ajuste_salida.xlsx"
-                        wb.save(ajuste_salida)
+                        wb_nuevo.save(ajuste_salida)
                         st.success(f"2º reparto creado: '{nombre_b}' con {len(filas_b)} expedición(es)")
                         st.rerun()
 
