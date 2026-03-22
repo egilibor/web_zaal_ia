@@ -280,9 +280,6 @@ with tab2:
             indices_seleccionados = [idx for idx, marcado in seleccion.items() if marcado]
             st.markdown(f"*{len(indices_seleccionados)} expedición(es) seleccionada(s)*")
 
-indices_seleccionados = [idx for idx, marcado in seleccion.items() if marcado]
-            st.markdown(f"*{len(indices_seleccionados)} expedición(es) seleccionada(s)*")
-
             if indices_seleccionados:
                 col_b1, col_b2 = st.columns(2)
                 with col_b1:
