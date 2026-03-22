@@ -317,8 +317,10 @@ with tab2:
                         for r in dataframe_to_rows(filas_a, index=False, header=True):
                             ws_a.append(r)
                         if nombre_b in wb.sheetnames:
-                            del wb[nombre_b]
-                        ws_b = wb.create_sheet(title=nombre_b)
+                            ws_b = wb[nombre_b]
+                            ws_b.delete_rows(1, ws_b.max_row)
+                        else:
+                            ws_b = wb.create_sheet(title=nombre_b)
                         for r in dataframe_to_rows(filas_b, index=False, header=True):
                             ws_b.append(r)
                         st.session_state["ajuste_wb"] = wb
