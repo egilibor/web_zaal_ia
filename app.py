@@ -325,6 +325,8 @@ with tab2:
                             ws_b.append(r)
                         st.session_state["ajuste_wb"] = wb
                         ajuste_salida = workdir / "ajuste_salida.xlsx"
+                        wb.defined_names = wb.defined_names.__class__()
+                        ajuste_salida = workdir / "ajuste_salida.xlsx"
                         wb.save(ajuste_salida)
                         st.success(f"2º reparto creado: '{nombre_b}' con {len(filas_b)} expedición(es)")
                         st.rerun()
