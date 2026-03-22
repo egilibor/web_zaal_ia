@@ -336,6 +336,9 @@ with tab2:
                         wb_nuevo.save(ajuste_salida)
                         from add_resumen_unico import generar_resumen_unico
                         generar_resumen_unico(str(ajuste_salida))
+                        # Recargar workbook desde disco con el resumen actualizado
+                        wb_actualizado = load_workbook(ajuste_salida)
+                        st.session_state["ajuste_wb"] = wb_actualizado
                         st.success(f"2º reparto creado: '{nombre_b}' con {len(filas_b)} expedición(es)")
                         st.rerun()
 
