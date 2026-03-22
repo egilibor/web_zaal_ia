@@ -264,13 +264,23 @@ with tab2:
 
             seleccion = {}
             for idx, row in df_origen.iterrows():
-                etiqueta = " · ".join(
-                    str(row[c]) for c in columnas_mostrar if pd.notna(row.get(c))
-                )
-                seleccion[idx] = st.checkbox(
-                    etiqueta,
-                    key=f"chk_{idx}"
-                )
+                cols_base = [c for c in ["Exp", "Consignatario", "Población", "Dirección"] if c in df_origen.columns]
+                etiqueta_base = " · ".join(str(row[c]) for c in cols_base if pd.notna(row.get(c)))
+                btos = row.get("Bultos", "")
+                kgs = row.get("Kgs", "")
+                etiqueta_detalle = ""
+                if pd.notna(btos) and pd.notna(kgs):
+                    etiqueta_detalle = f"{int(btos) if str(btos).replace('.','').isdigit() else btos} btos · {kgs} kg"
+                elif pd.notna(kgs):
+                    etiqueta_detalle = f"{kgs} kg"
+            
+                col_chk, col_det = st.columns([0.75, 0.25])
+                with col_chk:
+                    seleccion[idx] = st.checkbox(etiqueta_base, key=f"chk_{idx}")
+                with col_det:
+                    if etiqueta_detalle:
+                        
+            st.markdown(f"<small>{etiqueta_detalle}</small>", unsafe_allow_html=True)
 
             indices_seleccionados = [idx for idx, marcado in seleccion.items() if marcado]
             st.markdown(f"*{len(indices_seleccionados)} expedición(es) seleccionada(s)*")
