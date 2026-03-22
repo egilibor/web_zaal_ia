@@ -241,7 +241,9 @@ with tab2:
             with st.expander(f"Ver hoja destino: {hoja_destino} ({len(df_destino)} expediciones)"):
                 st.dataframe(df_destino[columnas_mostrar] if columnas_mostrar else df_destino, use_container_width=True)
 
-            st.markdown(f"**{hoja_origen}** — {len(df_origen)} expediciones")
+            total_btos = int(df_origen["Bultos"].apply(pd.to_numeric, errors="coerce").sum()) if "Bultos" in df_origen.columns else 0
+            total_kgs = df_origen["Kgs"].apply(pd.to_numeric, errors="coerce").sum() if "Kgs" in df_origen.columns else 0
+            st.markdown(f"**{hoja_origen}** — {len(df_origen)} expediciones · {total_btos} btos · {total_kgs:.0f} kg")
 
             master_actual = st.checkbox("Seleccionar todas", key="chk_master")
             master_anterior = st.session_state.get("chk_master_prev", False)
