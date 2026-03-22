@@ -281,8 +281,14 @@ with tab2:
             st.markdown(f"*{len(indices_seleccionados)} expedición(es) seleccionada(s)*")
 
             if indices_seleccionados:
-                col_b1, col_b2 = st.columns(2)
-                with col_b1:
+                accion = st.radio(
+                    "¿Qué hacer con las expediciones seleccionadas?",
+                    ["Mover a otra ruta", "Mover a 2º reparto"],
+                    key="radio_accion",
+                    horizontal=True
+                )
+
+                if accion == "Mover a otra ruta":
                     if st.button(f"Mover {len(indices_seleccionados)} exp. → {hoja_destino}", key="btn_mover"):
                         from openpyxl.utils.dataframe import dataframe_to_rows
                         df_src = ws_to_df(wb, hoja_origen)
@@ -298,7 +304,8 @@ with tab2:
                         st.session_state["ajuste_wb"] = wb
                         st.success(f"{len(indices_seleccionados)} expedición(es) movidas de '{hoja_origen}' a '{hoja_destino}'")
                         st.rerun()
-                with col_b2:
+
+                elif accion == "Mover a 2º reparto":
                     if st.button(f"Mover {len(indices_seleccionados)} exp. → 2º reparto", key="btn_segundo_reparto"):
                         from openpyxl.utils.dataframe import dataframe_to_rows
                         nombre_b = hoja_origen + "_B"
