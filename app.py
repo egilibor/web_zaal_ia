@@ -344,8 +344,8 @@ if indices_seleccionados:
                 key="btn_descarga_ajuste"
             )
 
-    else:
-        st.info("Sube el salida.xlsx de la Fase 1 para hacer ajustes manuales.")
+        else:
+            st.info("Sube el salida.xlsx de la Fase 1 para hacer ajustes manuales.")
         
 # ==========================================================
 # FASE 3
