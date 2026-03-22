@@ -149,15 +149,36 @@ with tab1:
                 if salida.exists():
                     generar_resumen_unico(str(salida))
                     st.success("Archivo generado correctamente")
-
+                
                     st.download_button(
                         "Descargar salida.xlsx",
                         data=salida.read_bytes(),
                         file_name="salida.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     )
-                else:
-                    st.error("No se generó salida.xlsx")
+                
+                    # --- NUEVO: Excel por gestor solo para Valencia ---
+                    if delegacion == "valencia":
+                        ruta_asignacion = REPO_DIR / "gestor_zonas.xlsx"
+                        resultado_gestores = generar_libros_gestores(
+                            ruta_excel_final=str(salida),
+                            ruta_asignacion=str(ruta_asignacion),
+                            carpeta_salida=str(workdir)
+                        )
+                        if resultado_gestores["ok"]:
+                            st.markdown("---")
+                            st.subheader("Excel por gestor de tráfico")
+                            for gestor, ruta_archivo in resultado_gestores["archivos_generados"].items():
+                                ruta = Path(ruta_archivo)
+                                st.download_button(
+                                    label=f"Descargar Excel {gestor}",
+                                    data=ruta.read_bytes(),
+                                    file_name=ruta.name,
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                )
+                        else:
+                            for e in resultado_gestores["errores"]:
+                                st.warning(e)
     else:
         st.info("Sube un CSV para habilitar la ejecución.")
 
@@ -353,53 +374,6 @@ with tab3:
                 import traceback
                 st.error(f"Error en reordenación: {e}")
                 st.code(traceback.format_exc())
-
-        # -------------------------------------------------
-        # DIVIDIR POR GESTORES (SOLO VALENCIA)
-        # -------------------------------------------------
-
-        if delegacion == "valencia" and output_path.exists():
-
-            st.markdown("---")
-            st.subheader("Dividir rutas para gestores de tráfico")
-
-            if st.button("Generar Excel por gestor", key="fase3_btn"):
-
-                try:
-
-                    ruta_asignacion = REPO_DIR / "gestor_zonas.xlsx"
-
-                    resultado = generar_libros_gestores(
-                        ruta_excel_final=str(output_path),
-                        ruta_asignacion=str(ruta_asignacion),
-                        carpeta_salida=str(workdir)
-                    )
-
-                    if not resultado["ok"]:
-
-                        st.error("Error generando libros de gestores")
-
-                        for e in resultado["errores"]:
-                            st.write(e)
-
-                    else:
-
-                        st.success("Archivos generados correctamente")
-
-                        for gestor, ruta_archivo in resultado["archivos_generados"].items():
-
-                            ruta = Path(ruta_archivo)
-
-                            st.download_button(
-                                label=f"Descargar Excel {gestor}",
-                                data=ruta.read_bytes(),
-                                file_name=ruta.name,
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            )
-
-                except Exception as e:
-
-                    st.error(f"Error en generación de gestores: {e}")
 
     else:
 
