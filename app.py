@@ -280,59 +280,46 @@ with tab2:
             indices_seleccionados = [idx for idx, marcado in seleccion.items() if marcado]
             st.markdown(f"*{len(indices_seleccionados)} expedición(es) seleccionada(s)*")
 
-if indices_seleccionados:
-    col_b1, col_b2 = st.columns(2)
+indices_seleccionados = [idx for idx, marcado in seleccion.items() if marcado]
+            st.markdown(f"*{len(indices_seleccionados)} expedición(es) seleccionada(s)*")
 
-    with col_b1:
-        if st.button(f"Mover {len(indices_seleccionados)} exp. → {hoja_destino}", key="btn_mover"):
-
-            from openpyxl.utils.dataframe import dataframe_to_rows
-
-            df_src = ws_to_df(wb, hoja_origen)
-            df_dst = ws_to_df(wb, hoja_destino)
-
-            filas_a_mover = df_src.loc[indices_seleccionados]
-            df_src_nuevo = df_src.drop(index=indices_seleccionados).reset_index(drop=True)
-            df_dst_nuevo = pd.concat([df_dst, filas_a_mover], ignore_index=True)
-
-            for nombre_hoja, df_nuevo in [(hoja_origen, df_src_nuevo), (hoja_destino, df_dst_nuevo)]:
-                ws = wb[nombre_hoja]
-                ws.delete_rows(1, ws.max_row)
-                for r in dataframe_to_rows(df_nuevo, index=False, header=True):
-                    ws.append(r)
-
-            st.session_state["ajuste_wb"] = wb
-            st.success(f"{len(indices_seleccionados)} expedición(es) movidas de '{hoja_origen}' a '{hoja_destino}'")
-            st.rerun()
-
-    with col_b2:
-        if st.button(f"Mover {len(indices_seleccionados)} exp. → 2º reparto", key="btn_segundo_reparto"):
-
-            from openpyxl.utils.dataframe import dataframe_to_rows
-
-            nombre_b = hoja_origen + "_B"
-            nombre_a = hoja_origen  # la hoja original pasa a ser la _A
-
-            df_src = ws_to_df(wb, hoja_origen)
-            filas_b = df_src.loc[indices_seleccionados]
-            filas_a = df_src.drop(index=indices_seleccionados).reset_index(drop=True)
-
-            # Actualizar hoja origen con solo las expediciones del 1er reparto
-            ws_a = wb[nombre_a]
-            ws_a.delete_rows(1, ws_a.max_row)
-            for r in dataframe_to_rows(filas_a, index=False, header=True):
-                ws_a.append(r)
-
-            # Crear o sobreescribir hoja _B
-            if nombre_b in wb.sheetnames:
-                del wb[nombre_b]
-            ws_b = wb.create_sheet(title=nombre_b)
-            for r in dataframe_to_rows(filas_b, index=False, header=True):
-                ws_b.append(r)
-
-            st.session_state["ajuste_wb"] = wb
-            st.success(f"2º reparto creado: '{nombre_b}' con {len(filas_b)} expedición(es)")
-            st.rerun()
+            if indices_seleccionados:
+                col_b1, col_b2 = st.columns(2)
+                with col_b1:
+                    if st.button(f"Mover {len(indices_seleccionados)} exp. → {hoja_destino}", key="btn_mover"):
+                        from openpyxl.utils.dataframe import dataframe_to_rows
+                        df_src = ws_to_df(wb, hoja_origen)
+                        df_dst = ws_to_df(wb, hoja_destino)
+                        filas_a_mover = df_src.loc[indices_seleccionados]
+                        df_src_nuevo = df_src.drop(index=indices_seleccionados).reset_index(drop=True)
+                        df_dst_nuevo = pd.concat([df_dst, filas_a_mover], ignore_index=True)
+                        for nombre_hoja, df_nuevo in [(hoja_origen, df_src_nuevo), (hoja_destino, df_dst_nuevo)]:
+                            ws = wb[nombre_hoja]
+                            ws.delete_rows(1, ws.max_row)
+                            for r in dataframe_to_rows(df_nuevo, index=False, header=True):
+                                ws.append(r)
+                        st.session_state["ajuste_wb"] = wb
+                        st.success(f"{len(indices_seleccionados)} expedición(es) movidas de '{hoja_origen}' a '{hoja_destino}'")
+                        st.rerun()
+                with col_b2:
+                    if st.button(f"Mover {len(indices_seleccionados)} exp. → 2º reparto", key="btn_segundo_reparto"):
+                        from openpyxl.utils.dataframe import dataframe_to_rows
+                        nombre_b = hoja_origen + "_B"
+                        df_src = ws_to_df(wb, hoja_origen)
+                        filas_b = df_src.loc[indices_seleccionados]
+                        filas_a = df_src.drop(index=indices_seleccionados).reset_index(drop=True)
+                        ws_a = wb[hoja_origen]
+                        ws_a.delete_rows(1, ws_a.max_row)
+                        for r in dataframe_to_rows(filas_a, index=False, header=True):
+                            ws_a.append(r)
+                        if nombre_b in wb.sheetnames:
+                            del wb[nombre_b]
+                        ws_b = wb.create_sheet(title=nombre_b)
+                        for r in dataframe_to_rows(filas_b, index=False, header=True):
+                            ws_b.append(r)
+                        st.session_state["ajuste_wb"] = wb
+                        st.success(f"2º reparto creado: '{nombre_b}' con {len(filas_b)} expedición(es)")
+                        st.rerun()
 
             ajuste_salida = workdir / "ajuste_salida.xlsx"
             wb.save(ajuste_salida)
@@ -344,9 +331,8 @@ if indices_seleccionados:
                 key="btn_descarga_ajuste"
             )
 
-        else:
-            st.info("Sube el salida.xlsx de la Fase 1 para hacer ajustes manuales.")
-        
+    else:
+        st.info("Sube el salida.xlsx de la Fase 1 para hacer ajustes manuales.")
 # ==========================================================
 # FASE 3
 # ==========================================================
