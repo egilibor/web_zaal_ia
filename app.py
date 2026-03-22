@@ -322,6 +322,8 @@ with tab2:
                         for r in dataframe_to_rows(filas_b, index=False, header=True):
                             ws_b.append(r)
                         st.session_state["ajuste_wb"] = wb
+                        ajuste_salida = workdir / "ajuste_salida.xlsx"
+                        wb.save(ajuste_salida)
                         st.success(f"2º reparto creado: '{nombre_b}' con {len(filas_b)} expedición(es)")
                         st.rerun()
 
