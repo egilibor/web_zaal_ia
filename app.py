@@ -334,6 +334,8 @@ with tab2:
                         st.session_state["ajuste_wb"] = wb_nuevo
                         ajuste_salida = workdir / "ajuste_salida.xlsx"
                         wb_nuevo.save(ajuste_salida)
+                        from add_resumen_unico import generar_resumen_unico
+                        generar_resumen_unico(str(ajuste_salida))
                         st.success(f"2º reparto creado: '{nombre_b}' con {len(filas_b)} expedición(es)")
                         st.rerun()
 
