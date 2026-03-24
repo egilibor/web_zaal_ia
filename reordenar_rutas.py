@@ -9,7 +9,10 @@ import re
 import googlemaps
 import requests
 import datetime
-
+import barcode
+from barcode.writer import ImageWriter
+from openpyxl.drawing.image import Image as XLImage
+import io
 # -------------------------------------------------
 # ORÍGENES
 # -------------------------------------------------
@@ -38,7 +41,23 @@ COLUMNAS_OBLIGATORIAS = [
     "N. servicio",
 ]
 
+#-----------------------------------------------------
+# FUNCION PARA GENERAR CÓDIGO DE BARRAS
+#-----------------------------------------------------
 
+def generar_barcode_imagen(codigo: str) -> io.BytesIO:
+    buffer = io.BytesIO()
+    code128 = barcode.get("code128", str(codigo), writer=ImageWriter())
+    code128.write(buffer, options={
+        "module_height": 8,
+        "module_width": 0.2,
+        "font_size": 5,
+        "text_distance": 2,
+        "quiet_zone": 2,
+    })
+    buffer.seek(0)
+    return buffer
+    
 # -------------------------------------------------
 # NORMALIZAR TEXTO
 # -------------------------------------------------
@@ -600,5 +619,41 @@ def reordenar_excel(
             except (TypeError, ValueError):
                 pass
 
+    # ── Códigos de barras ──
+    for nombre in hojas_navegacion.keys():
+        if nombre not in wb.sheetnames:
+            continue
+        ws = wb[nombre]
+        n_nav = len(hojas_navegacion[nombre]["segmentos"]) + 1
+
+        # Buscar columna "Exp"
+        col_exp = None
+        for cell in ws[n_nav + 1]:
+            if cell.value == "Exp":
+                col_exp = cell.column
+                break
+
+        if col_exp is None:
+            continue
+
+        # Añadir cabecera columna código de barras
+        col_barcode = ws.max_column + 1
+        ws.cell(row=n_nav + 1, column=col_barcode).value = "Barcode"
+
+        for row_idx in range(n_nav + 2, ws.max_row + 1):
+            exp_val = ws.cell(row=row_idx, column=col_exp).value
+            if not exp_val:
+                continue
+            try:
+                img_buffer = generar_barcode_imagen(str(exp_val))
+                img = XLImage(img_buffer)
+                img.width = 120
+                img.height = 35
+                celda = ws.cell(row=row_idx, column=col_barcode)
+                ws.row_dimensions[row_idx].height = 28
+                ws.add_image(img, celda.coordinate)
+            except Exception:
+                pass
+                
     wb.save(output_path)
     return paradas_por_hoja
