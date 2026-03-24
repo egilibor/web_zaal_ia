@@ -13,6 +13,24 @@ import barcode
 from barcode.writer import ImageWriter
 from openpyxl.drawing.image import Image as XLImage
 import io
+
+#-----------------------------------------------------
+# FUNCION PARA GENERAR CÓDIGO DE BARRAS
+#-----------------------------------------------------
+
+def generar_barcode_imagen(codigo: str) -> io.BytesIO:
+    buffer = io.BytesIO()
+    code128 = barcode.get("code128", str(codigo), writer=ImageWriter())
+    code128.write(buffer, options={
+        "module_height": 8,
+        "module_width": 0.2,
+        "font_size": 5,
+        "text_distance": 2,
+        "quiet_zone": 2,
+    })
+    buffer.seek(0)
+    return buffer
+    
 # -------------------------------------------------
 # ORÍGENES
 # -------------------------------------------------
@@ -41,23 +59,6 @@ COLUMNAS_OBLIGATORIAS = [
     "N. servicio",
 ]
 
-#-----------------------------------------------------
-# FUNCION PARA GENERAR CÓDIGO DE BARRAS
-#-----------------------------------------------------
-
-def generar_barcode_imagen(codigo: str) -> io.BytesIO:
-    buffer = io.BytesIO()
-    code128 = barcode.get("code128", str(codigo), writer=ImageWriter())
-    code128.write(buffer, options={
-        "module_height": 8,
-        "module_width": 0.2,
-        "font_size": 5,
-        "text_distance": 2,
-        "quiet_zone": 2,
-    })
-    buffer.seek(0)
-    return buffer
-    
 # -------------------------------------------------
 # NORMALIZAR TEXTO
 # -------------------------------------------------
