@@ -95,7 +95,7 @@ if st.sidebar.button("🔄 Cambiar delegación"):
 
 tab1, tab2, tab3 = st.tabs([
     "FASE 1 · Clasificación zonas",
-    "FASE 2 . Ajuste Manual",
+    "FASE 2 . Ajuste Gestores",
     "FASE 3 . Carga/Rutas Maps"
 ])
 
