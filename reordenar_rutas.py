@@ -517,8 +517,7 @@ def reordenar_excel(
 
             df_ordenado["NAVEGACIÓN"] = ""
 
-            if link:
-                df_ordenado.loc[df_ordenado.index[0], "NAVEGACIÓN"] = link
+
 
             # Asignar número de parada por proximidad
             UMBRAL = 0.0009
@@ -578,7 +577,7 @@ def reordenar_excel(
     # Añadir filas de navegación al principio de cada hoja
     from openpyxl import load_workbook
     from openpyxl.styles import Font
-    from openpyxl.utils import quote_sheetname
+    from openpyxl.utils import quote_sheetname, get_column_letter
 
     wb = load_workbook(output_path)
 
@@ -588,6 +587,7 @@ def reordenar_excel(
         ws = wb[nombre]
         ws.insert_rows(1, amount=len(datos["segmentos"]) + 1)
         ws.cell(row=1, column=1).value = "RUTA COMPLETA"
+        ws.cell(row=1, column=1).hyperlink = f"#{quote_sheetname('RESUMEN_UNICO')}!A1"
         ws.cell(row=1, column=2).value = datos["link_completo"]
         ws.cell(row=1, column=2).font = Font(color="0000FF", underline="single")
         for i, link in enumerate(datos["segmentos"]):
@@ -595,13 +595,19 @@ def reordenar_excel(
             ws.cell(row=2 + i, column=2).value = link
             ws.cell(row=2 + i, column=2).font = Font(color="0000FF", underline="single")
 
-        # Enlace de regreso a RESUMEN_UNICO en la última fila de navegación
+        # Botón de regreso en la última fila de navegación (sin hipervínculo; el enlace ya está en A1)
         ultima_fila_nav = 1 + len(datos["segmentos"])
         cell_back = ws.cell(row=ultima_fila_nav, column=3)
-        cell_back.value = "← RESUMEN"
-        cell_back.hyperlink = f"#{quote_sheetname('RESUMEN_UNICO')}!A1"
+        # cell_back.value = "← RESUMEN"
         cell_back.font = Font(color="FFFFFF", bold=True)
-        cell_back.fill = PatternFill(start_color="FF6600", end_color="FF6600", fill_type="solid")
+        #cell_back.fill = PatternFill(start_color="FF6600", end_color="FF6600", fill_type="solid")
+
+        # Eliminar hipervínculos en P1 y C2
+        ws["P1"].hyperlink = None
+        ws["C2"].hyperlink = None
+
+        # Eliminar contenido de N4 (ruta Google Maps)
+        ws.cell(row=len(datos["segmentos"]) + 3, column=15).value = None
 
     azul_claro = PatternFill(start_color="DDEEFF", end_color="DDEEFF", fill_type="solid")
 
@@ -627,7 +633,13 @@ def reordenar_excel(
         ws = wb[nombre]
         n_nav = len(hojas_navegacion[nombre]["segmentos"]) + 1
 
-        # Buscar columna "Exp"
+        # Insertar columna Barcode en columna C (posición 3), justo después de Parada (B)
+        ws.insert_cols(3)
+        col_barcode = 3
+        ws.cell(row=n_nav + 1, column=col_barcode).value = "Barcode"
+        ws.column_dimensions["C"].width = 16
+
+        # Buscar columna "Exp" después del insert (los índices >= 3 se han desplazado)
         col_exp = None
         for cell in ws[n_nav + 1]:
             if cell.value == "Exp":
@@ -636,10 +648,6 @@ def reordenar_excel(
 
         if col_exp is None:
             continue
-
-        # Añadir cabecera columna código de barras
-        col_barcode = ws.max_column + 1
-        ws.cell(row=n_nav + 1, column=col_barcode).value = "Barcode"
 
         for row_idx in range(n_nav + 2, ws.max_row + 1):
             exp_val = ws.cell(row=row_idx, column=col_exp).value
@@ -656,5 +664,16 @@ def reordenar_excel(
             except Exception:
                 pass
                 
+    # ── Anchos de columna ──
+    ANCHOS_COLUMNA = {"Exp": 15, "Población": 20, "Dirección": 40, "Consignatario": 35}
+    for nombre in hojas_navegacion.keys():
+        if nombre not in wb.sheetnames:
+            continue
+        ws = wb[nombre]
+        n_nav = len(hojas_navegacion[nombre]["segmentos"]) + 1
+        for cell in ws[n_nav + 1]:
+            if cell.value in ANCHOS_COLUMNA:
+                ws.column_dimensions[get_column_letter(cell.column)].width = ANCHOS_COLUMNA[cell.value]
+
     wb.save(output_path)
     return paradas_por_hoja
