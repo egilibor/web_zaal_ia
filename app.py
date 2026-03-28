@@ -543,11 +543,14 @@ with tab_refino:
                             _partes.append(str(_v) if _v is not None else "")
                     _items_labels.append(f"[{_orig_idx}] " + " · ".join(_partes))
 
-                _sorted_labels = _sort_items(
-                    _items_labels,
-                    direction="vertical",
-                    key=f"sortable_{_hoja_refino}",
-                )
+                col_sort, col_empty = st.columns([1, 1])
+                with col_sort:
+                    _sorted_labels = _sort_items(
+                        _items_labels,
+                        direction="vertical",
+                        key=f"sortable_{_hoja_refino}",
+                    )
+
 
                 _nuevo_orden = [int(_lbl.split("]")[0][1:]) for _lbl in _sorted_labels]
                 if _nuevo_orden != st.session_state.get(_orden_key):
