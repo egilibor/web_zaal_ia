@@ -260,7 +260,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
     COLUMNAS_BASE = [
         "Exp", "Hospital", "Población", "Dirección",
         "Consignatario", "Cliente", "Kgs",
-        "Bultos", "Z.Rep", "N. servicio"
+        "Bultos", "Z.Rep", "N. servicio", "C.P."
     ]
 
     # METADATOS

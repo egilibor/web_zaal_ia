@@ -8,10 +8,37 @@ import pandas as pd
 from pathlib import Path
 
 import streamlit as st
+from auth import init_db, render_login, render_panel_admin, registrar_actividad
 from reordenar_rutas import reordenar_excel
 from add_resumen_unico import generar_resumen_unico
 from modulo_valencia_gestores import generar_libros_gestores
 from openpyxl import load_workbook
+
+# ==========================================================
+# CONFIG (debe ser el primer comando Streamlit)
+# ==========================================================
+st.set_page_config(page_title="Reparto determinista", layout="wide")
+
+# ==========================================================
+# BASE DE DATOS Y AUTENTICACIÓN
+# ==========================================================
+init_db()
+
+if "usuario" not in st.session_state:
+    render_login()
+    st.stop()
+
+usuario = st.session_state["usuario"]
+
+# ==========================================================
+# SIDEBAR — SESIÓN
+# ==========================================================
+with st.sidebar:
+    st.markdown(f"**{usuario['nombre']}**  \n`{usuario['rol']}` · {usuario['agencia']}")
+    if st.button("Cerrar sesión"):
+        st.session_state.clear()
+        st.rerun()
+    st.markdown("---")
 
 # ==========================================================
 # WORKDIR
@@ -39,11 +66,10 @@ with st.sidebar:
         from geocodificador import limpiar_cache
         limpiar_cache()
         st.success("Caché limpiada correctamente")
-# ==========================================================
-# CONFIG
-# ==========================================================
-st.set_page_config(page_title="Reparto determinista", layout="wide")
 
+# ==========================================================
+# CONFIG RUTAS
+# ==========================================================
 if "GOOGLE_MAPS_API_KEY" not in st.secrets:
     st.error("⚠️ Falta la clave GOOGLE_MAPS_API_KEY en los secrets. Contacta con el administrador.")
     st.stop()
@@ -53,57 +79,74 @@ SCRIPT_REPARTO = REPO_DIR / "reparto_gpt.py"
 REGLAS_REPO = REPO_DIR / "Reglas_hospitales.xlsx"
 
 # ==========================================================
-# DELEGACIÓN - PANTALLA DE INICIO
+# DELEGACIÓN
+# - Admin:   selector en sidebar
+# - Usuario: agencia asignada, sin selector
 # ==========================================================
-if "delegacion_activa" not in st.session_state:
-    st.session_state.delegacion_activa = None
+AGENCIA_MAP = {"Valencia": "valencia", "Castellon": "castellon"}
 
-if st.session_state.delegacion_activa is None:
-    st.markdown("## Selecciona la delegación")
-    st.markdown("---")
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🏙️ CASTELLÓN", use_container_width=True, type="primary"):
-            st.session_state.delegacion_activa = "castellon"
-            st.rerun()
-    with col2:
-        if st.button("🌆 VALENCIA", use_container_width=True, type="primary"):
-            st.session_state.delegacion_activa = "valencia"
-            st.rerun()
-    st.stop()
+if usuario["rol"] == "admin":
+    if "delegacion_activa" not in st.session_state:
+        st.session_state.delegacion_activa = None
 
-delegacion = st.session_state.delegacion_activa
+    if st.session_state.delegacion_activa is None:
+        st.markdown("## Selecciona la delegación")
+        st.markdown("---")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🏙️ CASTELLÓN", use_container_width=True, type="primary"):
+                st.session_state.delegacion_activa = "castellon"
+                st.rerun()
+        with col2:
+            if st.button("🌆 VALENCIA", use_container_width=True, type="primary"):
+                st.session_state.delegacion_activa = "valencia"
+                st.rerun()
+        st.stop()
 
+    if st.sidebar.button("🔄 Cambiar delegación"):
+        st.session_state.delegacion_activa = None
+        st.session_state.pop("workdir", None)
+        st.rerun()
+
+    delegacion = st.session_state.delegacion_activa
+
+else:
+    # Usuario estándar: va directo a su agencia
+    delegacion = AGENCIA_MAP.get(usuario["agencia"], "valencia")
+    st.session_state.delegacion_activa = delegacion
+
+# ==========================================================
+# COORDENADAS
+# ==========================================================
 COORDENADAS_FILES = {
     "castellon": "Libro_de_Servicio_Castellon_con_coordenadas.xlsx",
-    "valencia": "valencia_municipios_coordenadas.xlsx",
+    "valencia":  "valencia_municipios_coordenadas.xlsx",
 }
-
 COORDENADAS_REPO = REPO_DIR / COORDENADAS_FILES[delegacion]
 
 st.title(f"Reparto determinista — {delegacion.upper()}")
 
-# Botón para cambiar delegación en sidebar
-if st.sidebar.button("🔄 Cambiar delegación"):
-    st.session_state.delegacion_activa = None
-    st.session_state.pop("workdir", None)
-    st.rerun()
-
 # ==========================================================
 # MENÚ HORIZONTAL
+# Admin ve además el panel de administración
 # ==========================================================
-
-tab1, tab2, tab3 = st.tabs([
-    "FASE 1 · Clasificación zonas",
-    "FASE 2 . Ajuste Gestores",
-    "FASE 3 . Orden de Carga/Google Maps"
-])
-
+if usuario["rol"] == "admin":
+    tab1, tab2, tab3, tab_admin = st.tabs([
+        "FASE 1 · Clasificación zonas",
+        "FASE 2 · Ajuste Gestores",
+        "FASE 3 · Orden de Carga/Google Maps",
+        "⚙️ Administración",
+    ])
+else:
+    tab1, tab2, tab3 = st.tabs([
+        "FASE 1 · Clasificación zonas",
+        "FASE 2 · Ajuste Gestores",
+        "FASE 3 · Orden de Carga/Google Maps",
+    ])
 
 # ==========================================================
 # FASE 1
 # ==========================================================
-
 with tab1:
 
     st.subheader("Subir CSV de llegadas")
@@ -148,16 +191,17 @@ with tab1:
                 salida = workdir / "salida.xlsx"
                 if salida.exists():
                     generar_resumen_unico(str(salida))
+                    registrar_actividad(usuario["id"], usuario["nombre"], delegacion, "Fase 1 - Clasificación zonas")
                     st.success("Archivo generado correctamente")
-                
+
                     st.download_button(
                         "Descargar salida.xlsx",
                         data=salida.read_bytes(),
                         file_name="salida.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     )
-                
-                    # --- NUEVO: Excel por gestor solo para Valencia ---
+
+                    # Excel por gestor solo para Valencia
                     if delegacion == "valencia":
                         ruta_asignacion = REPO_DIR / "gestor_zonas.xlsx"
                         resultado_gestores = generar_libros_gestores(
@@ -247,21 +291,18 @@ with tab2:
 
             master_actual = st.checkbox("Seleccionar todas", key="chk_master")
             master_anterior = st.session_state.get("chk_master_prev", False)
-            
+
             if master_actual and not master_anterior:
-                # Primera pulsación → marcar todo
                 for idx in df_origen.index:
                     st.session_state[f"chk_{idx}"] = True
             elif not master_actual and master_anterior:
-                # Segunda pulsación (desmarcar master) → desmarcar todo
                 for idx in df_origen.index:
                     st.session_state[f"chk_{idx}"] = False
             else:
-                # Estado inicial: inicializar los que no existen
                 for idx in df_origen.index:
                     if f"chk_{idx}" not in st.session_state:
                         st.session_state[f"chk_{idx}"] = False
-            
+
             st.session_state["chk_master_prev"] = master_actual
 
             seleccion = {}
@@ -302,6 +343,7 @@ with tab2:
                             for r in dataframe_to_rows(df_nuevo, index=False, header=True):
                                 ws.append(r)
                         st.session_state["ajuste_wb"] = wb
+                        registrar_actividad(usuario["id"], usuario["nombre"], delegacion, "Fase 2 - Ajuste Gestores")
                         st.success(f"{len(indices_seleccionados)} expedición(es) movidas de '{hoja_origen}' a '{hoja_destino}'")
                         st.rerun()
 
@@ -336,9 +378,9 @@ with tab2:
                         wb_nuevo.save(ajuste_salida)
                         from add_resumen_unico import generar_resumen_unico
                         generar_resumen_unico(str(ajuste_salida))
-                        # Recargar workbook desde disco con el resumen actualizado
                         wb_actualizado = load_workbook(ajuste_salida)
                         st.session_state["ajuste_wb"] = wb_actualizado
+                        registrar_actividad(usuario["id"], usuario["nombre"], delegacion, "Fase 2 - 2º reparto")
                         st.success(f"2º reparto creado: '{nombre_b}' con {len(filas_b)} expedición(es)")
                         st.rerun()
 
@@ -354,10 +396,10 @@ with tab2:
 
     else:
         st.info("Sube el salida.xlsx de la Fase 1 para hacer ajustes manuales.")
+
 # ==========================================================
 # FASE 3
 # ==========================================================
-
 with tab3:
 
     st.subheader("Reordenar rutas existentes")
@@ -370,7 +412,7 @@ with tab3:
 
     if archivo_excel:
 
-        input_path = workdir / "entrada_fase2.xlsx"
+        input_path  = workdir / "entrada_fase2.xlsx"
         output_path = workdir / "salida_reordenada.xlsx"
 
         input_path.write_bytes(archivo_excel.getbuffer())
@@ -378,14 +420,14 @@ with tab3:
         if st.button("Reordenar rutas", key="fase2_btn"):
 
             try:
-                
+
                 if delegacion == "valencia":
                     lat_origen = 39.44069
                     lon_origen = -0.42589
                 else:
                     lat_origen = 39.804106
                     lon_origen = -0.217351
-                    
+
                 paradas = reordenar_excel(
                     input_path,
                     output_path,
@@ -396,12 +438,11 @@ with tab3:
                     delegacion=delegacion,
                     hora_salida=hora_salida,
                 )
-                
- 
-                generar_resumen_unico(str(output_path), paradas_por_hoja=paradas)
-                
-                if output_path.exists():
 
+                generar_resumen_unico(str(output_path), paradas_por_hoja=paradas)
+
+                if output_path.exists():
+                    registrar_actividad(usuario["id"], usuario["nombre"], delegacion, "Fase 3 - Orden de Carga")
                     st.success("Rutas reordenadas correctamente")
 
                     st.download_button(
@@ -420,8 +461,11 @@ with tab3:
                 st.code(traceback.format_exc())
 
     else:
-
         st.info("Sube el archivo para activar la reordenación.")
 
-
-
+# ==========================================================
+# PANEL DE ADMINISTRACIÓN (solo admin)
+# ==========================================================
+if usuario["rol"] == "admin":
+    with tab_admin:
+        render_panel_admin()

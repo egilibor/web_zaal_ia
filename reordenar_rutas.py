@@ -275,6 +275,89 @@ def buscar_coords_referencia(pueblo_norm, coords):
 
 
 # -------------------------------------------------
+# REFERENCIA DE COORDENADAS POR CP
+# -------------------------------------------------
+
+def cargar_referencia_cp(delegacion: str) -> dict:
+    """
+    Carga el archivo de referencia correspondiente a la delegación y devuelve
+    un diccionario {cp_str: (lat, lon)} con las coordenadas de cada CP.
+    Valencia  → valencia_municipios_coordenadas.xlsx
+    Castellón → Libro_de_Servicio_Castellon_con_coordenadas.xlsx
+    """
+    raiz = Path(__file__).resolve().parent
+    if delegacion == "valencia":
+        ruta = raiz / "valencia_municipios_coordenadas.xlsx"
+        df = pd.read_excel(ruta)
+    else:
+        ruta = raiz / "Libro_de_Servicio_Castellon_con_coordenadas.xlsx"
+        df = pd.read_excel(ruta)
+
+    df.columns = df.columns.str.strip().str.upper()
+
+    cp_coords = {}
+    for _, row in df.iterrows():
+        cp = str(row.get("CODPOS", "")).strip().zfill(5)
+        lat = row.get("LATITUD")
+        lon = row.get("LONGITUD")
+        if cp and pd.notna(lat) and pd.notna(lon):
+            if cp not in cp_coords:
+                cp_coords[cp] = (float(lat), float(lon))
+
+    return cp_coords
+
+
+# -------------------------------------------------
+# ORDENACIÓN EN BLOQUES (API + fallback euclidiano)
+# -------------------------------------------------
+
+def ordenar_en_bloques(origen, waypoints, api_key, MAX_WAYPOINTS=25):
+    """
+    Ordena waypoints con la Routes API en bloques de MAX_WAYPOINTS.
+    Si hay más de MAX_WAYPOINTS puntos, hace un primer paso euclidiano para
+    obtener un orden inicial y luego refina cada bloque de 25 con la API,
+    encadenando el origen con el último punto del bloque anterior.
+    Usa ordenar_euclidiano como fallback si la API falla.
+    Devuelve lista de índices relativos a los waypoints de entrada.
+    """
+    if not waypoints:
+        return []
+    if len(waypoints) == 1:
+        return [0]
+
+    if len(waypoints) <= MAX_WAYPOINTS:
+        if api_key and len(waypoints) >= 2:
+            try:
+                return ordenar_segmento_api(origen, waypoints, api_key)
+            except Exception:
+                pass
+        return ordenar_euclidiano(origen, waypoints)
+
+    # Pre-ordenar con euclídeo para agrupar puntos cercanos
+    orden_eucl = ordenar_euclidiano(origen, waypoints)
+    waypoints_preord = [waypoints[i] for i in orden_eucl]
+
+    resultado = []
+    orig_actual = origen
+
+    for j in range(0, len(waypoints_preord), MAX_WAYPOINTS):
+        sub = waypoints_preord[j : j + MAX_WAYPOINTS]
+        if api_key and len(sub) >= 2:
+            try:
+                ord_sub = ordenar_segmento_api(orig_actual, sub, api_key)
+            except Exception:
+                ord_sub = ordenar_euclidiano(orig_actual, sub)
+        else:
+            ord_sub = list(range(len(sub)))
+
+        for o in ord_sub:
+            resultado.append(orden_eucl[j + o])
+        orig_actual = sub[ord_sub[-1]]
+
+    return resultado
+
+
+# -------------------------------------------------
 # ORDENACIÓN CON ROUTES API
 # -------------------------------------------------
 
@@ -428,28 +511,65 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
             idx_por_parada.append([idx])
 
     # -------------------------------------------------
-    # ORDENAR PARADAS (Routes API o fallback euclidiano)
+    # AGRUPAR PARADAS POR C.P.
     # -------------------------------------------------
-    MAX_WAYPOINTS = 25
+    # Asociar cada parada única con su C.P.
+    cp_por_parada = []
+    for i in range(len(paradas_unicas)):
+        indices = idx_por_parada[i]
+        cps = [
+            str(df.at[idx, 'C.P.']).strip().zfill(5)
+            for idx in indices
+            if 'C.P.' in df.columns and pd.notna(df.at[idx, 'C.P.'])
+        ]
+        cp_por_parada.append(cps[0] if cps else '')
+
+    grupos_cp = {}
+    for i, cp in enumerate(cp_por_parada):
+        grupos_cp.setdefault(cp, []).append(i)
+
+    # -------------------------------------------------
+    # PRIMERA PASADA — orden entre zonas (CPs)
+    # -------------------------------------------------
+    # Obtener coordenadas de referencia para cada CP desde el archivo de referencia
+    try:
+        cp_coords_ref = cargar_referencia_cp(delegacion)
+    except Exception as e:
+        print(f"DEBUG No se pudo cargar referencia CP: {e}")
+        cp_coords_ref = {}
+
+    lista_cps = list(grupos_cp.keys())
+    centroides = []
+    for cp in lista_cps:
+        if cp in cp_coords_ref:
+            centroides.append(cp_coords_ref[cp])
+        else:
+            # Fallback: centroide calculado de las paradas geocodificadas
+            lats = [paradas_unicas[i][0] for i in grupos_cp[cp]]
+            lons = [paradas_unicas[i][1] for i in grupos_cp[cp]]
+            centroides.append((sum(lats) / len(lats), sum(lons) / len(lons)))
+
+    # Ordenar CPs con la API (o euclídeo si no hay api_key)
+    orden_cps_idx = ordenar_en_bloques((lat_origen, lon_origen), centroides, api_key)
+    cps_ordenados = [lista_cps[i] for i in orden_cps_idx]
+
+    # -------------------------------------------------
+    # SEGUNDA PASADA — orden dentro de cada zona (CP)
+    # -------------------------------------------------
     orden_paradas = []
     origen_actual = (lat_origen, lon_origen)
 
-    # Pre-ordenar con euclidiano si hay más paradas que el límite de la API
-    if len(paradas_unicas) > MAX_WAYPOINTS:
-        orden_previo = ordenar_euclidiano((lat_origen, lon_origen), paradas_unicas)
-        paradas_unicas = [paradas_unicas[i] for i in orden_previo]
-        idx_por_parada = [idx_por_parada[i] for i in orden_previo]
-        
-    for i in range(0, len(paradas_unicas), MAX_WAYPOINTS):
-        segmento = paradas_unicas[i:i + MAX_WAYPOINTS]
+    for cp in cps_ordenados:
+        indices_paradas_cp = grupos_cp[cp]
+        coords_cp = [paradas_unicas[i] for i in indices_paradas_cp]
 
-        if api_key and len(segmento) >= 2:
-            orden_seg = ordenar_segmento_api(origen_actual, segmento, api_key)
-        else:
-            orden_seg = ordenar_euclidiano(origen_actual, segmento)
+        orden_seg = ordenar_en_bloques(origen_actual, coords_cp, api_key)
 
-        orden_paradas.extend([i + o for o in orden_seg])
-        origen_actual = paradas_unicas[i + orden_seg[-1]]
+        for o in orden_seg:
+            orden_paradas.append(indices_paradas_cp[o])
+
+        if orden_seg:
+            origen_actual = coords_cp[orden_seg[-1]]
 
     # -------------------------------------------------
     # RECONSTRUIR ORDEN DE FILAS
