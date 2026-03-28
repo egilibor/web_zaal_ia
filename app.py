@@ -531,26 +531,27 @@ with tab_refino:
                 st.markdown(f"**{_hoja_refino}** — {len(_data_rows)} expediciones")
                 st.markdown("---")
 
+                from streamlit_sortables import sort_items as _sort_items
+
+                _items_labels = []
                 for _pos, _orig_idx in enumerate(_orden):
                     _row_data = _data_rows[_orig_idx]
-                    _btn_cols = st.columns([0.35, 0.35] + [3] * len(_cols_mostrar))
+                    _partes = [str(_pos + 1)]
+                    for _col_name in ["Exp", "Población", "Dirección"]:
+                        if _col_name in _col_idx:
+                            _v = _row_data[_col_idx[_col_name]]
+                            _partes.append(str(_v) if _v is not None else "")
+                    _items_labels.append(f"[{_orig_idx}] " + " · ".join(_partes))
 
-                    with _btn_cols[0]:
-                        if _pos > 0 and st.button("↑", key=f"ref_up_{_hoja_refino}_{_pos}"):
-                            _orden[_pos], _orden[_pos - 1] = _orden[_pos - 1], _orden[_pos]
-                            st.session_state[_orden_key] = _orden
-                            st.rerun()
+                _sorted_labels = _sort_items(
+                    _items_labels,
+                    direction="vertical",
+                    key=f"sortable_{_hoja_refino}",
+                )
 
-                    with _btn_cols[1]:
-                        if _pos < len(_orden) - 1 and st.button("↓", key=f"ref_dn_{_hoja_refino}_{_pos}"):
-                            _orden[_pos], _orden[_pos + 1] = _orden[_pos + 1], _orden[_pos]
-                            st.session_state[_orden_key] = _orden
-                            st.rerun()
-
-                    for _ci, _col_name in enumerate(_cols_mostrar):
-                        _val = _row_data[_col_idx[_col_name]] if _col_idx[_col_name] < len(_row_data) else ""
-                        with _btn_cols[2 + _ci]:
-                            st.write(str(_val) if _val is not None else "")
+                _nuevo_orden = [int(_lbl.split("]")[0][1:]) for _lbl in _sorted_labels]
+                if _nuevo_orden != st.session_state.get(_orden_key):
+                    st.session_state[_orden_key] = _nuevo_orden
 
                 st.markdown("---")
 

@@ -4,3 +4,4 @@ openpyxl
 googlemaps
 python-barcode
 Pillow
+streamlit-sortables
