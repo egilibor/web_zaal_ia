@@ -9,7 +9,7 @@ from pathlib import Path
 
 import streamlit as st
 from auth import init_db, render_login, render_panel_admin, registrar_actividad
-from reordenar_rutas import reordenar_excel
+from reordenar_rutas import reordenar_excel, generar_link_pueblos, generar_links_segmentos
 from add_resumen_unico import generar_resumen_unico
 from modulo_valencia_gestores import generar_libros_gestores
 from openpyxl import load_workbook
@@ -131,17 +131,19 @@ st.title(f"Reparto determinista — {delegacion.upper()}")
 # Admin ve además el panel de administración
 # ==========================================================
 if usuario["rol"] == "admin":
-    tab1, tab2, tab3, tab_admin = st.tabs([
+    tab1, tab2, tab3, tab_refino, tab_admin = st.tabs([
         "FASE 1 · Clasificación zonas",
         "FASE 2 · Ajuste Gestores",
         "FASE 3 · Orden de Carga/Google Maps",
+        "FASE 4 · Refino",
         "⚙️ Administración",
     ])
 else:
-    tab1, tab2, tab3 = st.tabs([
+    tab1, tab2, tab3, tab_refino = st.tabs([
         "FASE 1 · Clasificación zonas",
         "FASE 2 · Ajuste Gestores",
         "FASE 3 · Orden de Carga/Google Maps",
+        "FASE 4 · Refino",
     ])
 
 # ==========================================================
@@ -462,6 +464,202 @@ with tab3:
 
     else:
         st.info("Sube el archivo para activar la reordenación.")
+
+# ==========================================================
+# FASE DE REFINO
+# ==========================================================
+with tab_refino:
+
+    st.subheader("Ajuste fino del orden de expediciones")
+
+    archivo_refino = st.file_uploader(
+        "Subir salida_reordenada.xlsx",
+        type=["xlsx"],
+        key="refino_excel"
+    )
+
+    if archivo_refino:
+
+        _file_id_refino = archivo_refino.name + str(archivo_refino.size)
+        if st.session_state.get("refino_file_id") != _file_id_refino:
+            _refino_path = workdir / "refino_entrada.xlsx"
+            _refino_path.write_bytes(archivo_refino.getbuffer())
+            st.session_state["refino_file_id"] = _file_id_refino
+            st.session_state["refino_path"] = str(_refino_path)
+            for _k in [_k for _k in st.session_state if _k.startswith("refino_orden_")]:
+                del st.session_state[_k]
+
+        _refino_path = Path(st.session_state["refino_path"])
+
+        _wb_tmp = load_workbook(_refino_path, read_only=True)
+        _hojas_refino = [
+            h for h in _wb_tmp.sheetnames
+            if h.startswith("ZREP_") or h in ("HOSPITALES", "FEDERACION")
+        ]
+        _wb_tmp.close()
+
+        if not _hojas_refino:
+            st.warning("No se encontraron hojas operativas (ZREP_, HOSPITALES, FEDERACION).")
+        else:
+            _hoja_refino = st.selectbox("Seleccionar hoja", _hojas_refino, key="refino_hoja")
+
+            _wb_r = load_workbook(_refino_path, read_only=True, data_only=True)
+            _ws_r = _wb_r[_hoja_refino]
+            _all_rows = [tuple(c.value for c in row) for row in _ws_r.iter_rows()]
+            _wb_r.close()
+
+            _hdr_idx = None
+            for _i, _row in enumerate(_all_rows):
+                if _row and "Exp" in _row:
+                    _hdr_idx = _i
+                    break
+
+            if _hdr_idx is None:
+                st.error("No se encontró la cabecera (columna Exp) en la hoja seleccionada.")
+            else:
+                _headers = list(_all_rows[_hdr_idx])
+                _data_rows = _all_rows[_hdr_idx + 1:]
+
+                _orden_key = f"refino_orden_{_hoja_refino}"
+                if _orden_key not in st.session_state or len(st.session_state[_orden_key]) != len(_data_rows):
+                    st.session_state[_orden_key] = list(range(len(_data_rows)))
+
+                _orden = st.session_state[_orden_key]
+                _col_idx = {h: i for i, h in enumerate(_headers) if h is not None}
+                _cols_mostrar = [c for c in ["Exp", "Población", "Dirección", "Consignatario"] if c in _col_idx]
+
+                st.markdown(f"**{_hoja_refino}** — {len(_data_rows)} expediciones")
+                st.markdown("---")
+
+                for _pos, _orig_idx in enumerate(_orden):
+                    _row_data = _data_rows[_orig_idx]
+                    _btn_cols = st.columns([0.35, 0.35] + [3] * len(_cols_mostrar))
+
+                    with _btn_cols[0]:
+                        if _pos > 0 and st.button("↑", key=f"ref_up_{_hoja_refino}_{_pos}"):
+                            _orden[_pos], _orden[_pos - 1] = _orden[_pos - 1], _orden[_pos]
+                            st.session_state[_orden_key] = _orden
+                            st.rerun()
+
+                    with _btn_cols[1]:
+                        if _pos < len(_orden) - 1 and st.button("↓", key=f"ref_dn_{_hoja_refino}_{_pos}"):
+                            _orden[_pos], _orden[_pos + 1] = _orden[_pos + 1], _orden[_pos]
+                            st.session_state[_orden_key] = _orden
+                            st.rerun()
+
+                    for _ci, _col_name in enumerate(_cols_mostrar):
+                        _val = _row_data[_col_idx[_col_name]] if _col_idx[_col_name] < len(_row_data) else ""
+                        with _btn_cols[2 + _ci]:
+                            st.write(str(_val) if _val is not None else "")
+
+                st.markdown("---")
+
+                if st.button("Guardar y regenerar rutas", key="refino_guardar", type="primary"):
+                    try:
+                        from openpyxl.styles import Font, PatternFill
+
+                        _wb_save = load_workbook(_refino_path)
+                        _ws_save = _wb_save[_hoja_refino]
+
+                        _save_rows = list(_ws_save.iter_rows(values_only=True))
+                        _save_hdr = None
+                        for _si, _sr in enumerate(_save_rows):
+                            if _sr and "Exp" in _sr:
+                                _save_hdr = _si + 1  # 1-indexed
+                                break
+
+                        if _save_hdr is None:
+                            st.error("Error: no se encontró la cabecera al guardar.")
+                        else:
+                            _save_header_vals = list(_save_rows[_save_hdr - 1])
+                            _save_data_vals = _save_rows[_save_hdr:]
+                            _data_nuevo = [_save_data_vals[i] for i in _orden]
+                            _n_nav_save = _save_hdr - 1
+
+                            # Clear images (anchors become invalid after row reorder)
+                            _ws_save._images = []
+
+                            # Delete old data rows and write reordered values
+                            if _ws_save.max_row > _save_hdr:
+                                _ws_save.delete_rows(_save_hdr + 1, _ws_save.max_row - _save_hdr)
+
+                            _azul_claro = PatternFill(start_color="DDEEFF", end_color="DDEEFF", fill_type="solid")
+                            _parada_col = _save_header_vals.index("Parada") if "Parada" in _save_header_vals else None
+
+                            for _ri, _row_vals in enumerate(_data_nuevo):
+                                _excel_row = _save_hdr + 1 + _ri
+                                for _ci_v, _v in enumerate(list(_row_vals) if _row_vals else []):
+                                    _ws_save.cell(row=_excel_row, column=_ci_v + 1).value = _v
+                                if _parada_col is not None and _row_vals:
+                                    try:
+                                        if int(_row_vals[_parada_col]) % 2 != 0:
+                                            for _ci_v in range(len(_row_vals)):
+                                                _ws_save.cell(row=_excel_row, column=_ci_v + 1).fill = _azul_claro
+                                    except (TypeError, ValueError):
+                                        pass
+
+                            # Regenerate Google Maps links
+                            _col_lat = _save_header_vals.index("Latitud") if "Latitud" in _save_header_vals else None
+                            _col_lon = _save_header_vals.index("Longitud") if "Longitud" in _save_header_vals else None
+
+                            if _col_lat is not None and _col_lon is not None:
+                                _df_refino = pd.DataFrame(_data_nuevo, columns=_save_header_vals)
+
+                                if delegacion == "valencia":
+                                    _lat_orig, _lon_orig = 39.44069, -0.42589
+                                else:
+                                    _lat_orig, _lon_orig = 39.804106, -0.217351
+
+                                _link_completo = generar_link_pueblos(_df_refino, _lat_orig, _lon_orig)
+                                _segmentos = generar_links_segmentos(_df_refino, _lat_orig, _lon_orig)
+
+                                # Update navigation rows
+                                _ws_save.cell(row=1, column=2).value = _link_completo
+                                _ws_save.cell(row=1, column=2).font = Font(color="0000FF", underline="single")
+                                for _si2, _slink in enumerate(_segmentos):
+                                    _seg_row = 2 + _si2
+                                    if _seg_row <= _n_nav_save:
+                                        _ws_save.cell(row=_seg_row, column=2).value = _slink
+                                        _ws_save.cell(row=_seg_row, column=2).font = Font(color="0000FF", underline="single")
+
+                            # Add/update REFINO history sheet
+                            _now = datetime.datetime.now()
+                            if "REFINO" not in _wb_save.sheetnames:
+                                _ws_refino_hist = _wb_save.create_sheet("REFINO")
+                                _ws_refino_hist.append(["Fecha", "Hora", "Usuario", "Hoja modificada"])
+                            else:
+                                _ws_refino_hist = _wb_save["REFINO"]
+
+                            _ws_refino_hist.append([
+                                _now.strftime("%Y-%m-%d"),
+                                _now.strftime("%H:%M:%S"),
+                                usuario["nombre"],
+                                _hoja_refino,
+                            ])
+
+                            _wb_save.save(_refino_path)
+
+                            registrar_actividad(
+                                usuario["id"], usuario["nombre"], delegacion,
+                                f"Fase de Refino - {_hoja_refino}"
+                            )
+
+                            st.success("Rutas regeneradas correctamente.")
+                            st.download_button(
+                                "Descargar salida_reordenada.xlsx actualizado",
+                                data=_refino_path.read_bytes(),
+                                file_name="salida_reordenada.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                key="refino_download"
+                            )
+
+                    except Exception as _e:
+                        import traceback
+                        st.error(f"Error al guardar: {_e}")
+                        st.code(traceback.format_exc())
+
+    else:
+        st.info("Sube el salida_reordenada.xlsx de la Fase 3 para ajustar el orden.")
 
 # ==========================================================
 # PANEL DE ADMINISTRACIÓN (solo admin)
