@@ -288,11 +288,10 @@ def cargar_referencia_cp(delegacion: str) -> dict:
     raiz = Path(__file__).resolve().parent
     if delegacion == "valencia":
         ruta = raiz / "valencia_municipios_coordenadas.xlsx"
-        df = pd.read_excel(ruta)
     else:
         ruta = raiz / "Libro_de_Servicio_Castellon_con_coordenadas.xlsx"
-        df = pd.read_excel(ruta)
 
+    df = pd.read_excel(ruta)
     df.columns = df.columns.str.strip().str.upper()
 
     cp_coords = {}
@@ -308,60 +307,10 @@ def cargar_referencia_cp(delegacion: str) -> dict:
 
 
 # -------------------------------------------------
-# ORDENACIÓN EN BLOQUES (API + fallback euclidiano)
-# -------------------------------------------------
-
-def ordenar_en_bloques(origen, waypoints, api_key, MAX_WAYPOINTS=25):
-    """
-    Ordena waypoints con la Routes API en bloques de MAX_WAYPOINTS.
-    Si hay más de MAX_WAYPOINTS puntos, hace un primer paso euclidiano para
-    obtener un orden inicial y luego refina cada bloque de 25 con la API,
-    encadenando el origen con el último punto del bloque anterior.
-    Usa ordenar_euclidiano como fallback si la API falla.
-    Devuelve lista de índices relativos a los waypoints de entrada.
-    """
-    if not waypoints:
-        return []
-    if len(waypoints) == 1:
-        return [0]
-
-    if len(waypoints) <= MAX_WAYPOINTS:
-        if api_key and len(waypoints) >= 2:
-            try:
-                return ordenar_segmento_api(origen, waypoints, api_key)
-            except Exception:
-                pass
-        return ordenar_euclidiano(origen, waypoints)
-
-    # Pre-ordenar con euclídeo para agrupar puntos cercanos
-    orden_eucl = ordenar_euclidiano(origen, waypoints)
-    waypoints_preord = [waypoints[i] for i in orden_eucl]
-
-    resultado = []
-    orig_actual = origen
-
-    for j in range(0, len(waypoints_preord), MAX_WAYPOINTS):
-        sub = waypoints_preord[j : j + MAX_WAYPOINTS]
-        if api_key and len(sub) >= 2:
-            try:
-                ord_sub = ordenar_segmento_api(orig_actual, sub, api_key)
-            except Exception:
-                ord_sub = ordenar_euclidiano(orig_actual, sub)
-        else:
-            ord_sub = list(range(len(sub)))
-
-        for o in ord_sub:
-            resultado.append(orden_eucl[j + o])
-        orig_actual = sub[ord_sub[-1]]
-
-    return resultado
-
-
-# -------------------------------------------------
 # ORDENACIÓN CON ROUTES API
 # -------------------------------------------------
 
-def ordenar_segmento_api(origen, waypoints_coords, api_key):
+def ordenar_segmento_api(origen, waypoints_coords, api_key, circuito_cerrado=True):
     try:
         url = "https://routes.googleapis.com/directions/v2:computeRoutes"
 
@@ -371,20 +320,26 @@ def ordenar_segmento_api(origen, waypoints_coords, api_key):
             "X-Goog-FieldMask": "routes.optimizedIntermediateWaypointIndex"
         }
 
+        if circuito_cerrado:
+            intermediates = waypoints_coords
+            destino_lat, destino_lon = origen
+        else:
+            intermediates = waypoints_coords[:-1]
+            destino_lat, destino_lon = waypoints_coords[-1]
+
         body = {
             "origin": {
                 "location": {"latLng": {"latitude": origen[0], "longitude": origen[1]}}
             },
             "destination": {
-                "location": {"latLng": {"latitude": origen[0], "longitude": origen[1]}}
+                "location": {"latLng": {"latitude": destino_lat, "longitude": destino_lon}}
             },
             "intermediates": [
-                {
-                    "location": {"latLng": {"latitude": lat, "longitude": lon}}
-                }
-                for lat, lon in waypoints_coords
+                {"location": {"latLng": {"latitude": lat, "longitude": lon}}}
+                for lat, lon in intermediates
             ],
             "travelMode": "DRIVE",
+            "routingPreference": "TRAFFIC_UNAWARE",
             "optimizeWaypointOrder": True
         }
 
@@ -393,6 +348,8 @@ def ordenar_segmento_api(origen, waypoints_coords, api_key):
 
         if "routes" in data and data["routes"]:
             orden = data["routes"][0].get("optimizedIntermediateWaypointIndex", [])
+            if not circuito_cerrado:
+                orden = list(orden) + [len(waypoints_coords) - 1]
             return orden
         else:
             print(f"DEBUG Routes API sin resultado: {data}")
@@ -422,6 +379,56 @@ def ordenar_euclidiano(origen, waypoints_coords):
         restantes.remove(min_idx)
 
     return orden
+
+
+# -------------------------------------------------
+# ORDENACIÓN EN BLOQUES (API + fallback euclidiano)
+# -------------------------------------------------
+
+def ordenar_en_bloques(origen, waypoints, api_key, MAX_WAYPOINTS=25, circuito_cerrado=True):
+    """
+    Ordena waypoints con la Routes API en bloques de MAX_WAYPOINTS.
+    Si hay más de MAX_WAYPOINTS puntos, hace un primer paso euclidiano para
+    obtener un orden inicial y luego refina cada bloque de 25 con la API,
+    encadenando el origen con el último punto del bloque anterior.
+    Usa ordenar_euclidiano como fallback si la API falla.
+    Devuelve lista de índices relativos a los waypoints de entrada.
+    """
+    if not waypoints:
+        return []
+    if len(waypoints) == 1:
+        return [0]
+
+    if len(waypoints) <= MAX_WAYPOINTS:
+        if api_key and len(waypoints) >= 2:
+            try:
+                return ordenar_segmento_api(origen, waypoints, api_key, circuito_cerrado=circuito_cerrado)
+            except Exception:
+                pass
+        return ordenar_euclidiano(origen, waypoints)
+
+    # Pre-ordenar con euclídeo para agrupar puntos cercanos
+    orden_eucl = ordenar_euclidiano(origen, waypoints)
+    waypoints_preord = [waypoints[i] for i in orden_eucl]
+
+    resultado = []
+    orig_actual = origen
+
+    for j in range(0, len(waypoints_preord), MAX_WAYPOINTS):
+        sub = waypoints_preord[j : j + MAX_WAYPOINTS]
+        if api_key and len(sub) >= 2:
+            try:
+                ord_sub = ordenar_segmento_api(orig_actual, sub, api_key, circuito_cerrado=circuito_cerrado)
+            except Exception:
+                ord_sub = ordenar_euclidiano(orig_actual, sub)
+        else:
+            ord_sub = list(range(len(sub)))
+
+        for o in ord_sub:
+            resultado.append(orden_eucl[j + o])
+        orig_actual = sub[ord_sub[-1]]
+
+    return resultado
 
 
 # -------------------------------------------------
@@ -513,7 +520,6 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
     # -------------------------------------------------
     # AGRUPAR PARADAS POR C.P.
     # -------------------------------------------------
-    # Asociar cada parada única con su C.P.
     cp_por_parada = []
     for i in range(len(paradas_unicas)):
         indices = idx_por_parada[i]
@@ -531,7 +537,6 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
     # -------------------------------------------------
     # PRIMERA PASADA — orden entre zonas (CPs)
     # -------------------------------------------------
-    # Obtener coordenadas de referencia para cada CP desde el archivo de referencia
     try:
         cp_coords_ref = cargar_referencia_cp(delegacion)
     except Exception as e:
@@ -549,8 +554,13 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
             lons = [paradas_unicas[i][1] for i in grupos_cp[cp]]
             centroides.append((sum(lats) / len(lats), sum(lons) / len(lons)))
 
-    # Ordenar CPs con la API (o euclídeo si no hay api_key)
-    orden_cps_idx = ordenar_en_bloques((lat_origen, lon_origen), centroides, api_key)
+    # Ordenar CPs con ruta abierta (sin circuito cerrado) para evitar zigzags
+    orden_cps_idx = ordenar_en_bloques(
+        (lat_origen, lon_origen), centroides, api_key, circuito_cerrado=False
+    )
+    print("Orden CPs tras API:")
+    for i in orden_cps_idx:
+        print(f"  {lista_cps[i]} → {centroides[i]}")
     cps_ordenados = [lista_cps[i] for i in orden_cps_idx]
 
     # -------------------------------------------------
@@ -563,7 +573,7 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
         indices_paradas_cp = grupos_cp[cp]
         coords_cp = [paradas_unicas[i] for i in indices_paradas_cp]
 
-        orden_seg = ordenar_en_bloques(origen_actual, coords_cp, api_key)
+        orden_seg = ordenar_en_bloques(origen_actual, coords_cp, api_key, circuito_cerrado=True)
 
         for o in orden_seg:
             orden_paradas.append(indices_paradas_cp[o])
@@ -636,8 +646,6 @@ def reordenar_excel(
             link = generar_link_pueblos(df_ordenado, lat_origen, lon_origen)
 
             df_ordenado["NAVEGACIÓN"] = ""
-
-
 
             # Asignar número de parada por proximidad
             UMBRAL = 0.0009
@@ -715,12 +723,10 @@ def reordenar_excel(
             ws.cell(row=2 + i, column=2).value = link
             ws.cell(row=2 + i, column=2).font = Font(color="0000FF", underline="single")
 
-        # Botón de regreso en la última fila de navegación (sin hipervínculo; el enlace ya está en A1)
+        # Botón de regreso en la última fila de navegación
         ultima_fila_nav = 1 + len(datos["segmentos"])
         cell_back = ws.cell(row=ultima_fila_nav, column=3)
-        # cell_back.value = "← RESUMEN"
         cell_back.font = Font(color="FFFFFF", bold=True)
-        #cell_back.fill = PatternFill(start_color="FF6600", end_color="FF6600", fill_type="solid")
 
         # Eliminar hipervínculos en P1 y C2
         ws["P1"].hyperlink = None
@@ -783,7 +789,7 @@ def reordenar_excel(
                 ws.add_image(img, celda.coordinate)
             except Exception:
                 pass
-                
+
     # ── Anchos de columna ──
     ANCHOS_COLUMNA = {"Exp": 15, "Población": 20, "Dirección": 40, "Consignatario": 35}
     for nombre in hojas_navegacion.keys():
@@ -797,3 +803,60 @@ def reordenar_excel(
 
     wb.save(output_path)
     return paradas_por_hoja
+
+
+# -------------------------------------------------
+# GENERAR KML
+# -------------------------------------------------
+
+def generar_kml(df: pd.DataFrame, nombre_hoja: str, lat_origen: float, lon_origen: float) -> str:
+    """
+    Genera un archivo KML con las paradas de la hoja en orden.
+    Devuelve el contenido KML como string.
+    """
+    lineas = []
+    lineas.append('<?xml version="1.0" encoding="UTF-8"?>')
+    lineas.append('<kml xmlns="http://www.opengis.net/kml/2.2">')
+    lineas.append('<Document>')
+    lineas.append(f'  <name>{nombre_hoja}</name>')
+
+    # Origen
+    lineas.append('  <Placemark>')
+    lineas.append('    <name>ORIGEN</name>')
+    lineas.append('    <Point>')
+    lineas.append(f'      <coordinates>{lon_origen},{lat_origen},0</coordinates>')
+    lineas.append('    </Point>')
+    lineas.append('  </Placemark>')
+
+    coords_vistas = set()
+    parada_num = 0
+
+    for _, row in df.iterrows():
+        lat = row.get("Latitud")
+        lon = row.get("Longitud")
+        if lat is None or lon is None or pd.isna(lat) or pd.isna(lon):
+            continue
+        clave = (round(float(lat), 5), round(float(lon), 5))
+        if clave in coords_vistas:
+            continue
+        coords_vistas.add(clave)
+        parada_num += 1
+
+        direccion = str(row.get("Dirección", "")).strip()
+        poblacion = str(row.get("Población", "")).strip()
+        consignatario = str(row.get("Consignatario", "")).strip()
+        nombre = f"{parada_num}. {poblacion} — {direccion}"
+        descripcion = consignatario
+
+        lineas.append('  <Placemark>')
+        lineas.append(f'    <name>{nombre}</name>')
+        lineas.append(f'    <description>{descripcion}</description>')
+        lineas.append('    <Point>')
+        lineas.append(f'      <coordinates>{float(lon)},{float(lat)},0</coordinates>')
+        lineas.append('    </Point>')
+        lineas.append('  </Placemark>')
+
+    lineas.append('</Document>')
+    lineas.append('</kml>')
+
+    return "\n".join(lineas)

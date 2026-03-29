@@ -196,7 +196,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
     df["Kgs"] = df["Kgs"].apply(parse_kg)
     df["Bultos"] = df["Btos."].apply(parse_int)
     df["Población"] = df["Población"].fillna("")
-    df["Dirección"] = df["Dir_OK"].fillna("")
+    df["Dirección"] = df["Dir. entrega"].fillna("")
     df["Z.Rep"] = df["Z.Rep"].fillna("")
     df["Cliente"] = df.get("Cliente", "")
 

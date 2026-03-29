@@ -9,7 +9,7 @@ from pathlib import Path
 
 import streamlit as st
 from auth import init_db, render_login, render_panel_admin, registrar_actividad
-from reordenar_rutas import reordenar_excel, generar_link_pueblos, generar_links_segmentos
+from reordenar_rutas import reordenar_excel, generar_link_pueblos, generar_links_segmentos, generar_kml
 from add_resumen_unico import generar_resumen_unico
 from modulo_valencia_gestores import generar_libros_gestores
 from openpyxl import load_workbook
@@ -131,19 +131,21 @@ st.title(f"Reparto determinista — {delegacion.upper()}")
 # Admin ve además el panel de administración
 # ==========================================================
 if usuario["rol"] == "admin":
-    tab1, tab2, tab3, tab_refino, tab_admin = st.tabs([
+    tab1, tab2, tab3, tab_refino, tab5, tab_admin = st.tabs([
         "FASE 1 · Clasificación zonas",
         "FASE 2 · Ajuste Gestores",
         "FASE 3 · Orden de Carga/Google Maps",
         "FASE 4 · Refino",
+        "FASE 5 · Exportar KML",
         "⚙️ Administración",
     ])
 else:
-    tab1, tab2, tab3, tab_refino = st.tabs([
+    tab1, tab2, tab3, tab_refino, tab5 = st.tabs([
         "FASE 1 · Clasificación zonas",
         "FASE 2 · Ajuste Gestores",
         "FASE 3 · Orden de Carga/Google Maps",
         "FASE 4 · Refino",
+        "FASE 5 · Exportar KML",
     ])
 
 # ==========================================================
@@ -551,7 +553,6 @@ with tab_refino:
                         key=f"sortable_{_hoja_refino}",
                     )
 
-
                 _nuevo_orden = [int(_lbl.split("]")[0][1:]) for _lbl in _sorted_labels]
                 if _nuevo_orden != st.session_state.get(_orden_key):
                     st.session_state[_orden_key] = _nuevo_orden
@@ -664,6 +665,75 @@ with tab_refino:
 
     else:
         st.info("Sube el salida_reordenada.xlsx de la Fase 3 para ajustar el orden.")
+
+# ==========================================================
+# FASE 5 · EXPORTAR KML
+# ==========================================================
+with tab5:
+
+    st.subheader("Exportar ruta en formato KML")
+
+    archivo_kml = st.file_uploader(
+        "Subir salida_reordenada.xlsx",
+        type=["xlsx"],
+        key="fase5_excel"
+    )
+
+    if archivo_kml:
+
+        _kml_file_id = archivo_kml.name + str(archivo_kml.size)
+        if st.session_state.get("kml_file_id") != _kml_file_id:
+            _kml_path = workdir / "kml_entrada.xlsx"
+            _kml_path.write_bytes(archivo_kml.getbuffer())
+            st.session_state["kml_file_id"] = _kml_file_id
+            st.session_state["kml_path"] = str(_kml_path)
+
+        _kml_path = Path(st.session_state["kml_path"])
+
+        _wb_kml = load_workbook(_kml_path, read_only=True)
+        _hojas_kml = [
+            h for h in _wb_kml.sheetnames
+            if h.startswith("ZREP_") or h in ("HOSPITALES", "FEDERACION")
+        ]
+        _wb_kml.close()
+
+        if not _hojas_kml:
+            st.warning("No se encontraron hojas operativas (ZREP_, HOSPITALES, FEDERACION).")
+        else:
+            _hoja_kml = st.selectbox("Selecciona la zona", _hojas_kml, key="kml_hoja_sel")
+
+            if delegacion == "valencia":
+                _lat_kml, _lon_kml = 39.44069, -0.42589
+            else:
+                _lat_kml, _lon_kml = 39.804106, -0.217351
+
+            _df_kml = pd.read_excel(_kml_path, sheet_name=_hoja_kml, header=None)
+
+            # Buscar fila de cabecera (contiene "Exp")
+            _hdr_row = None
+            for _i, _row in _df_kml.iterrows():
+                if "Exp" in _row.values:
+                    _hdr_row = _i
+                    break
+
+            if _hdr_row is None:
+                st.error("No se encontró la cabecera en la hoja seleccionada.")
+            else:
+                _df_kml.columns = _df_kml.iloc[_hdr_row]
+                _df_kml = _df_kml.iloc[_hdr_row + 1:].reset_index(drop=True)
+
+                _kml_str = generar_kml(_df_kml, _hoja_kml, _lat_kml, _lon_kml)
+
+                st.download_button(
+                    f"⬇️ Descargar {_hoja_kml}.kml",
+                    data=_kml_str.encode("utf-8"),
+                    file_name=f"{_hoja_kml}.kml",
+                    mime="application/vnd.google-earth.kml+xml",
+                    key="kml_download_btn"
+                )
+
+    else:
+        st.info("Sube el salida_reordenada.xlsx para generar el KML.")
 
 # ==========================================================
 # PANEL DE ADMINISTRACIÓN (solo admin)
