@@ -140,12 +140,11 @@ if usuario["rol"] == "admin":
         "⚙️ Administración",
     ])
 else:
-    tab1, tab2, tab3, tab_refino, tab5 = st.tabs([
+    tab1, tab2, tab3, tab_refino = st.tabs([
         "FASE 1 · Clasificación zonas",
         "FASE 2 · Ajuste Gestores",
         "FASE 3 · Orden de Carga/Google Maps",
         "FASE 4 · Refino",
-        "FASE 5 · Exportar KML",
     ])
 
 # ==========================================================
@@ -178,6 +177,9 @@ with tab1:
                 "--csv", "llegadas.csv",
                 "--reglas", "Reglas_hospitales.xlsx",
                 "--out", "salida.xlsx",
+                "--delegacion", delegacion,
+                "--api_key", st.secrets["GOOGLE_MAPS_API_KEY"],
+                "--coordenadas", str(COORDENADAS_REPO),
             ]
 
             with st.spinner("Ejecutando reparto_gpt.py…"):
@@ -535,27 +537,70 @@ with tab_refino:
 
                 from streamlit_sortables import sort_items as _sort_items
 
+                if f"sortable_version_{_hoja_refino}" not in st.session_state:
+                    st.session_state[f"sortable_version_{_hoja_refino}"] = 0
+
                 _items_labels = []
                 for _pos, _orig_idx in enumerate(_orden):
                     _row_data = _data_rows[_orig_idx]
-                    _partes = [str(_pos + 1)]
+                    _partes_data = []
                     for _col_name in ["Exp", "Población", "Dirección"]:
                         if _col_name in _col_idx:
                             _v = _row_data[_col_idx[_col_name]]
-                            _partes.append(str(_v) if _v is not None else "")
-                    _items_labels.append(f"[{_orig_idx}] " + " · ".join(_partes))
+                            _partes_data.append(str(_v) if _v is not None else "")
+                    _items_labels.append(f"[{_orig_idx}] {_pos + 1}. " + " · ".join(_partes_data))
 
+                _version = st.session_state.get(f"sortable_version_{_hoja_refino}", 0)
                 col_sort, col_empty = st.columns([1, 1])
                 with col_sort:
                     _sorted_labels = _sort_items(
                         _items_labels,
                         direction="vertical",
-                        key=f"sortable_{_hoja_refino}",
+                        key=f"sortable_{_hoja_refino}_{_version}",
                     )
 
                 _nuevo_orden = [int(_lbl.split("]")[0][1:]) for _lbl in _sorted_labels]
                 if _nuevo_orden != st.session_state.get(_orden_key):
                     st.session_state[_orden_key] = _nuevo_orden
+
+                st.markdown("---")
+                st.markdown("**Mover bloque de expediciones**")
+                _n_exp = len(st.session_state[_orden_key])
+                _bc1, _bc2, _bc3, _bc4 = st.columns([1, 1, 1, 1])
+                with _bc1:
+                    _bloque_ini = st.number_input(
+                        "Posición inicial", min_value=1, max_value=_n_exp,
+                        value=1, step=1, key=f"bloque_ini_{_hoja_refino}"
+                    )
+                with _bc2:
+                    _bloque_fin = st.number_input(
+                        "Posición final", min_value=1, max_value=_n_exp,
+                        value=1, step=1, key=f"bloque_fin_{_hoja_refino}"
+                    )
+                with _bc3:
+                    _bloque_dest = st.number_input(
+                        "Insertar en posición", min_value=1, max_value=_n_exp,
+                        value=1, step=1, key=f"bloque_dest_{_hoja_refino}"
+                    )
+                with _bc4:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("Mover bloque", key=f"mover_bloque_{_hoja_refino}"):
+                        _ini = int(_bloque_ini)
+                        _fin = int(_bloque_fin)
+                        _dest = int(_bloque_dest)
+                        if _ini > _fin:
+                            st.error("La posición inicial debe ser menor o igual a la final.")
+                        elif _ini == _dest:
+                            st.info("El bloque ya está en esa posición.")
+                        else:
+                            _ord_actual = list(st.session_state[_orden_key])
+                            _bloque = _ord_actual[_ini - 1:_fin]
+                            _resto = _ord_actual[:_ini - 1] + _ord_actual[_fin:]
+                            _insert_idx = min(_dest - 1, len(_resto))
+                            _ord_nuevo = _resto[:_insert_idx] + _bloque + _resto[_insert_idx:]
+                            st.session_state[_orden_key] = _ord_nuevo
+                            st.session_state[f"sortable_version_{_hoja_refino}"] += 1
+                            st.rerun()
 
                 st.markdown("---")
 

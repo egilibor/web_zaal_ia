@@ -13,6 +13,8 @@ from typing import List
 import pandas as pd
 import difflib
 import json
+from geocodificador import geocodificar
+from reordenar_rutas import cargar_coordenadas, buscar_coords_referencia, normalizar_texto
 # -------------------------
 # CALLEJERO CASTELLÓN
 # -------------------------
@@ -89,6 +91,19 @@ def clean_text(x) -> str:
     if pd.isna(x):
         return ""
     return re.sub(r"\s+", " ", str(x).strip())
+
+
+_ILLEGAL_CHARS_RE = re.compile(
+    r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]"
+)
+
+def sanitize_cell(x):
+    """Elimina caracteres de control ilegales para openpyxl antes de escribir en Excel."""
+    if x is None or (isinstance(x, float) and pd.isna(x)):
+        return None
+    if isinstance(x, str):
+        return _ILLEGAL_CHARS_RE.sub("", x)
+    return x
 
 
 def parse_kg(x) -> float:
@@ -182,7 +197,8 @@ def style_sheet(ws):
 # CORE
 # -------------------------
 
-def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegacion: str) -> None:
+def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegacion: str,
+        api_key: str = "", ruta_coordenadas: Path | None = None) -> None:
 
     df = pd.read_csv(
         csv_path,
@@ -206,8 +222,55 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
     df["Dirección"] = df.apply(
         lambda r: corregir_calle_castellon(r["Población"], r["Dirección"]),
         axis=1
-    )    
-    
+    )
+
+    # -------------------------
+    # GEOCODIFICACIÓN (Fase 1)
+    # -------------------------
+    df["Latitud"] = None
+    df["Longitud"] = None
+
+    coords_municipios = {}
+    if ruta_coordenadas is not None:
+        try:
+            coords_municipios = cargar_coordenadas(ruta_coordenadas)
+        except Exception as e:
+            print(f"Aviso: no se pudo cargar coordenadas de municipios: {e}")
+
+    if api_key or coords_municipios:
+        provincia = "VALENCIA" if delegacion == "valencia" else "CASTELLON"
+        for idx, row in df.iterrows():
+            dir_limpia = str(row["Dirección"]).strip()
+            pob_limpia = str(row["Población"]).strip()
+            cp = str(row.get("C.P.", "") or "").strip()
+            lat, lon = None, None
+
+            if api_key and dir_limpia.upper() not in ("NAN", "NONE", "") and pob_limpia.upper() not in ("NAN", "NONE", ""):
+                if cp.upper() not in ("NAN", "NONE", ""):
+                    direccion_completa = f"{dir_limpia}, {cp} {pob_limpia}, {provincia}, ESPAÑA"
+                else:
+                    direccion_completa = f"{dir_limpia}, {pob_limpia}, {provincia}, ESPAÑA"
+                lat, lon = geocodificar(direccion_completa, api_key)
+
+                if lat is not None and lon is not None and coords_municipios:
+                    pueblo_norm = normalizar_texto(pob_limpia)
+                    coords_ref = buscar_coords_referencia(pueblo_norm, coords_municipios)
+                    if coords_ref is not None:
+                        lat_ref, lon_ref = coords_ref
+                        if ((lat - lat_ref) ** 2 + (lon - lon_ref) ** 2) ** 0.5 > 0.1:
+                            lat, lon = None, None
+
+            # Fallback a coordenadas del municipio
+            if (lat is None or lon is None) and coords_municipios:
+                pueblo_norm = normalizar_texto(pob_limpia)
+                coords_ref = buscar_coords_referencia(pueblo_norm, coords_municipios)
+                if coords_ref is not None:
+                    lat, lon = coords_ref
+
+            if lat is not None and lon is not None:
+                df.at[idx, "Latitud"] = lat
+                df.at[idx, "Longitud"] = lon
+
     # -------------------------
     # APLICAR REGLAS
     # -------------------------
@@ -260,7 +323,8 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
     COLUMNAS_BASE = [
         "Exp", "Hospital", "Población", "Dirección",
         "Consignatario", "Cliente", "Kgs",
-        "Bultos", "Z.Rep", "N. servicio", "C.P."
+        "Bultos", "Z.Rep", "N. servicio", "C.P.",
+        "Latitud", "Longitud",
     ]
 
     # METADATOS
@@ -277,19 +341,19 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
 
     ws_meta = wb_out.create_sheet("METADATOS")
     for row in dataframe_to_rows(meta, index=False, header=True):
-        ws_meta.append(row)
+        ws_meta.append([sanitize_cell(v) for v in row])
     style_sheet(ws_meta)
 
     # HOSPITALES
     ws_h = wb_out.create_sheet("HOSPITALES")
     for row in dataframe_to_rows(hosp[COLUMNAS_BASE], index=False, header=True):
-        ws_h.append(row)
+        ws_h.append([sanitize_cell(v) for v in row])
     style_sheet(ws_h)
 
     # FEDERACION
     ws_f = wb_out.create_sheet("FEDERACION")
     for row in dataframe_to_rows(fed[COLUMNAS_BASE], index=False, header=True):
-        ws_f.append(row)
+        ws_f.append([sanitize_cell(v) for v in row])
     style_sheet(ws_f)
 
     # ZREP
@@ -316,7 +380,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
         ws = wb_out.create_sheet(nombre)
 
         for row in dataframe_to_rows(sub[COLUMNAS_BASE], index=False, header=True):
-            ws.append(row)
+            ws.append([sanitize_cell(v) for v in row])
 
         style_sheet(ws)
 
@@ -356,14 +420,18 @@ def main():
     parser.add_argument("--reglas")
     parser.add_argument("--out")
     parser.add_argument("--delegacion", default="castellon")
+    parser.add_argument("--api_key", default="")
+    parser.add_argument("--coordenadas", default=None)
 
     args = parser.parse_args()
 
     csv_p = Path(args.csv)
     reglas_p = Path(args.reglas)
     out_p = Path(args.out)
+    coord_p = Path(args.coordenadas) if args.coordenadas else None
 
-    run(csv_p, reglas_p, out_p, "LLEGADAS", args.delegacion)
+    run(csv_p, reglas_p, out_p, "LLEGADAS", args.delegacion,
+        api_key=args.api_key, ruta_coordenadas=coord_p)
 
     print(f"OK: generado {out_p}")
 

@@ -442,13 +442,20 @@ def ordenar_dataframe_zrep(df, coords, lat_origen, lon_origen, api_key="", deleg
             raise ValueError(f"Falta columna obligatoria: {col}")
 
     df = df.copy()
-    df["Latitud"] = None
-    df["Longitud"] = None
+    # Conservar coordenadas ya presentes (geocodificadas en Fase 1)
+    if "Latitud" not in df.columns:
+        df["Latitud"] = None
+    if "Longitud" not in df.columns:
+        df["Longitud"] = None
 
     # -------------------------------------------------
-    # GEOCODIFICACIÓN
+    # GEOCODIFICACIÓN (solo filas sin coordenadas)
     # -------------------------------------------------
     for idx, row in df.iterrows():
+        # Reutilizar coordenadas existentes sin llamar a la API
+        if pd.notna(row["Latitud"]) and pd.notna(row["Longitud"]):
+            continue
+
         pueblo_norm = normalizar_texto(row["Población"])
         cp = str(row.get('C.P.', '')).strip()
         lat, lon = (None, None)
