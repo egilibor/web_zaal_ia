@@ -712,73 +712,73 @@ with tab_refino:
         st.info("Sube el salida_reordenada.xlsx de la Fase 3 para ajustar el orden.")
 
 # ==========================================================
-# FASE 5 · EXPORTAR KML
+# FASE 5 · EXPORTAR KML (solo admin)
 # ==========================================================
-with tab5:
+if usuario["rol"] == "admin":
+    with tab5:
 
-    st.subheader("Exportar ruta en formato KML")
+        st.subheader("Exportar ruta en formato KML")
 
-    archivo_kml = st.file_uploader(
-        "Subir salida_reordenada.xlsx",
-        type=["xlsx"],
-        key="fase5_excel"
-    )
+        archivo_kml = st.file_uploader(
+            "Subir salida_reordenada.xlsx",
+            type=["xlsx"],
+            key="fase5_excel"
+        )
 
-    if archivo_kml:
+        if archivo_kml:
 
-        _kml_file_id = archivo_kml.name + str(archivo_kml.size)
-        if st.session_state.get("kml_file_id") != _kml_file_id:
-            _kml_path = workdir / "kml_entrada.xlsx"
-            _kml_path.write_bytes(archivo_kml.getbuffer())
-            st.session_state["kml_file_id"] = _kml_file_id
-            st.session_state["kml_path"] = str(_kml_path)
+            _kml_file_id = archivo_kml.name + str(archivo_kml.size)
+            if st.session_state.get("kml_file_id") != _kml_file_id:
+                _kml_path = workdir / "kml_entrada.xlsx"
+                _kml_path.write_bytes(archivo_kml.getbuffer())
+                st.session_state["kml_file_id"] = _kml_file_id
+                st.session_state["kml_path"] = str(_kml_path)
 
-        _kml_path = Path(st.session_state["kml_path"])
+            _kml_path = Path(st.session_state["kml_path"])
 
-        _wb_kml = load_workbook(_kml_path, read_only=True)
-        _hojas_kml = [
-            h for h in _wb_kml.sheetnames
-            if h.startswith("ZREP_") or h in ("HOSPITALES", "FEDERACION")
-        ]
-        _wb_kml.close()
+            _wb_kml = load_workbook(_kml_path, read_only=True)
+            _hojas_kml = [
+                h for h in _wb_kml.sheetnames
+                if h.startswith("ZREP_") or h in ("HOSPITALES", "FEDERACION")
+            ]
+            _wb_kml.close()
 
-        if not _hojas_kml:
-            st.warning("No se encontraron hojas operativas (ZREP_, HOSPITALES, FEDERACION).")
+            if not _hojas_kml:
+                st.warning("No se encontraron hojas operativas (ZREP_, HOSPITALES, FEDERACION).")
+            else:
+                _hoja_kml = st.selectbox("Selecciona la zona", _hojas_kml, key="kml_hoja_sel")
+
+                if delegacion == "valencia":
+                    _lat_kml, _lon_kml = 39.44069, -0.42589
+                else:
+                    _lat_kml, _lon_kml = 39.804106, -0.217351
+
+                _df_kml = pd.read_excel(_kml_path, sheet_name=_hoja_kml, header=None)
+
+                _hdr_row = None
+                for _i, _row in _df_kml.iterrows():
+                    if "Exp" in _row.values:
+                        _hdr_row = _i
+                        break
+
+                if _hdr_row is None:
+                    st.error("No se encontró la cabecera en la hoja seleccionada.")
+                else:
+                    _df_kml.columns = _df_kml.iloc[_hdr_row]
+                    _df_kml = _df_kml.iloc[_hdr_row + 1:].reset_index(drop=True)
+
+                    _kml_str = generar_kml(_df_kml, _hoja_kml, _lat_kml, _lon_kml)
+
+                    st.download_button(
+                        f"⬇️ Descargar {_hoja_kml}.kml",
+                        data=_kml_str.encode("utf-8"),
+                        file_name=f"{_hoja_kml}.kml",
+                        mime="application/vnd.google-earth.kml+xml",
+                        key="kml_download_btn"
+                    )
+
         else:
-            _hoja_kml = st.selectbox("Selecciona la zona", _hojas_kml, key="kml_hoja_sel")
-
-            if delegacion == "valencia":
-                _lat_kml, _lon_kml = 39.44069, -0.42589
-            else:
-                _lat_kml, _lon_kml = 39.804106, -0.217351
-
-            _df_kml = pd.read_excel(_kml_path, sheet_name=_hoja_kml, header=None)
-
-            # Buscar fila de cabecera (contiene "Exp")
-            _hdr_row = None
-            for _i, _row in _df_kml.iterrows():
-                if "Exp" in _row.values:
-                    _hdr_row = _i
-                    break
-
-            if _hdr_row is None:
-                st.error("No se encontró la cabecera en la hoja seleccionada.")
-            else:
-                _df_kml.columns = _df_kml.iloc[_hdr_row]
-                _df_kml = _df_kml.iloc[_hdr_row + 1:].reset_index(drop=True)
-
-                _kml_str = generar_kml(_df_kml, _hoja_kml, _lat_kml, _lon_kml)
-
-                st.download_button(
-                    f"⬇️ Descargar {_hoja_kml}.kml",
-                    data=_kml_str.encode("utf-8"),
-                    file_name=f"{_hoja_kml}.kml",
-                    mime="application/vnd.google-earth.kml+xml",
-                    key="kml_download_btn"
-                )
-
-    else:
-        st.info("Sube el salida_reordenada.xlsx para generar el KML.")
+            st.info("Sube el salida_reordenada.xlsx para generar el KML.")
 
 # ==========================================================
 # PANEL DE ADMINISTRACIÓN (solo admin)
