@@ -5,7 +5,7 @@ Aplicación Streamlit + Python para optimización de rutas de reparto de paquete
 ## Arquitectura
 
 - `app.py` — interfaz Streamlit con 5 fases + panel admin
-- `reparto_gpt.py` — Fase 1: clasifica expediciones del CSV en hojas Excel por zona
+- `reparto_gpt.py` — Fase 1: clasifica expediciones del CSV en hojas Excel por zona 
 - `reordenar_rutas.py` — Fase 3: geocodifica y ordena rutas con Google Routes API
 - `geocodificador.py` — geocodificación con caché SQLite
 - `add_resumen_unico.py` — genera hoja RESUMEN_UNICO en el Excel

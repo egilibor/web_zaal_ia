@@ -528,6 +528,11 @@ with tab_refino:
                 if _orden_key not in st.session_state or len(st.session_state[_orden_key]) != len(_data_rows):
                     st.session_state[_orden_key] = list(range(len(_data_rows)))
 
+                    st.session_state[_orden_key] = list(range(len(_data_rows)))
+                    st.session_state.pop(f"bloque_ini_{_hoja_refino}", None)
+                    st.session_state.pop(f"bloque_fin_{_hoja_refino}", None)
+                    st.session_state.pop(f"bloque_dest_{_hoja_refino}", None)
+
                 _orden = st.session_state[_orden_key]
                 _col_idx = {h: i for i, h in enumerate(_headers) if h is not None}
                 _cols_mostrar = [c for c in ["Exp", "Población", "Dirección", "Consignatario"] if c in _col_idx]
@@ -566,6 +571,9 @@ with tab_refino:
                 st.markdown("---")
                 st.markdown("**Mover bloque de expediciones**")
                 _n_exp = len(st.session_state[_orden_key])
+                if _n_exp == 0:
+                    st.info("Esta hoja no tiene expediciones.")
+                    st.stop()
                 _bc1, _bc2, _bc3, _bc4 = st.columns([1, 1, 1, 1])
                 with _bc1:
                     _bloque_ini = st.number_input(
