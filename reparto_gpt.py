@@ -200,17 +200,48 @@ def style_sheet(ws):
 def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegacion: str,
         api_key: str = "", ruta_coordenadas: Path | None = None) -> None:
 
-    df = pd.read_csv(
-        csv_path,
-        sep=";",
-        encoding="utf-8-sig",
-        dtype=str,
-        engine="python",
-        on_bad_lines="skip"
-    )
+    try:
+        df = pd.read_csv(
+            csv_path,
+            sep=";",
+            encoding="utf-8-sig",
+            dtype=str,
+            engine="python",
+            on_bad_lines="skip"
+        )
+    except UnicodeDecodeError:
+        df = pd.read_csv(
+            csv_path,
+            sep=";",
+            encoding="latin-1",
+            dtype=str,
+            engine="python",
+            on_bad_lines="skip"
+        )
+
+    COL_MAP = {
+        "N.Exp":    "Exp",
+        "Cod.Pos":  "C.P.",
+        "Domicilio": "Dir. entrega",
+    }
+    df.rename(columns={k: v for k, v in COL_MAP.items() if k in df.columns}, inplace=True)
+
+    df["Exp"] = df["Exp"].astype(str).str.strip()
+
+    if "Kgs" not in df.columns and "K.Doc" in df.columns:
+        df["Kgs"] = df["K.Doc"]
+    if "Btos." not in df.columns and "K.Doc" in df.columns:
+        df["Btos."] = df["K.Doc"]
+
+    for col in ["N. servicio", "Cliente"]:
+        if col not in df.columns:
+            df[col] = ""
 
     df["Kgs"] = df["Kgs"].apply(parse_kg)
-    df["Bultos"] = df["Btos."].apply(parse_int)
+    if "B.Doc" in df.columns:
+        df["Bultos"] = df["B.Doc"].apply(parse_int)
+    else:
+        df["Bultos"] = df["Btos."].apply(parse_int)
     df["Población"] = df["Población"].fillna("")
     df["Dirección"] = df["Dir. entrega"].fillna("")
     df["Z.Rep"] = df["Z.Rep"].fillna("")
@@ -327,6 +358,8 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
         "Latitud", "Longitud",
     ]
 
+    COLUMNAS_EXTRA = ["Remitente", "Tel.Contacto", "ObsClt", "F.Max.Ent", "Compromiso", "Prio.", "B.Doc", "F.Teo.Entr.", "Obs.", "AmpFtiI"]
+
     # METADATOS
     meta = pd.DataFrame({
         "Clave": ["Delegación", "Origen de datos", "CSV", "Reglas", "Generado"],
@@ -345,14 +378,15 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
     style_sheet(ws_meta)
 
     # HOSPITALES
+    cols_out = [c for c in COLUMNAS_BASE + COLUMNAS_EXTRA if c in df.columns]
     ws_h = wb_out.create_sheet("HOSPITALES")
-    for row in dataframe_to_rows(hosp[COLUMNAS_BASE], index=False, header=True):
+    for row in dataframe_to_rows(hosp[cols_out], index=False, header=True):
         ws_h.append([sanitize_cell(v) for v in row])
     style_sheet(ws_h)
 
     # FEDERACION
     ws_f = wb_out.create_sheet("FEDERACION")
-    for row in dataframe_to_rows(fed[COLUMNAS_BASE], index=False, header=True):
+    for row in dataframe_to_rows(fed[cols_out], index=False, header=True):
         ws_f.append([sanitize_cell(v) for v in row])
     style_sheet(ws_f)
 
@@ -379,7 +413,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
 
         ws = wb_out.create_sheet(nombre)
 
-        for row in dataframe_to_rows(sub[COLUMNAS_BASE], index=False, header=True):
+        for row in dataframe_to_rows(sub[cols_out], index=False, header=True):
             ws.append([sanitize_cell(v) for v in row])
 
         style_sheet(ws)

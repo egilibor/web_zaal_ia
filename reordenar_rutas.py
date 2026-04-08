@@ -633,7 +633,24 @@ def reordenar_excel(
     hora_salida=None,
 ):
 
-    hojas = pd.read_excel(input_path, sheet_name=None)
+    hojas_raw = pd.read_excel(input_path, sheet_name=None, header=None)
+    # La fila de cabecera real puede estar en la fila 0 (sin "← RESUMEN") o en la fila 1
+    # (cuando add_resumen_unico insertó "← RESUMEN" en la fila 1 del Excel)
+    hojas = {}
+    for nombre, df in hojas_raw.items():
+        if df.empty:
+            hojas[nombre] = df
+            continue
+        primera = str(df.iloc[0, 0]).strip() if df.iloc[0, 0] is not None else ""
+        if primera == "← RESUMEN":
+            # Cabeceras reales en la fila 1, datos desde la fila 2
+            df.columns = df.iloc[1]
+            df = df.iloc[2:].reset_index(drop=True)
+        else:
+            # Cabeceras en la fila 0
+            df.columns = df.iloc[0]
+            df = df.iloc[1:].reset_index(drop=True)
+        hojas[nombre] = df
     coords = cargar_coordenadas(ruta_coordenadas)
     hojas_resultado = {}
 
