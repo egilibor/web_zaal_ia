@@ -196,6 +196,21 @@ with tab1:
             else:
                 salida = workdir / "salida.xlsx"
                 if salida.exists():
+                    # Crear hoja ALMACEN antes de generar resumen para que aparezca en él
+                    from openpyxl import load_workbook as _lw_f1
+                    _wb_f1 = _lw_f1(salida)
+                    if "ALMACEN" not in _wb_f1.sheetnames:
+                        _ref_hoja = next(
+                            (h for h in ["HOSPITALES", "FEDERACION"] + sorted([s for s in _wb_f1.sheetnames if s.startswith("ZREP_")])
+                             if h in _wb_f1.sheetnames),
+                            None
+                        )
+                        _idx_hosp = _wb_f1.sheetnames.index("HOSPITALES") if "HOSPITALES" in _wb_f1.sheetnames else 0
+                        _ws_alm = _wb_f1.create_sheet(title="ALMACEN", index=_idx_hosp)
+                        if _ref_hoja:
+                            _cabeceras = [c.value for c in next(_wb_f1[_ref_hoja].iter_rows(min_row=1, max_row=1))]
+                            _ws_alm.append(_cabeceras)
+                        _wb_f1.save(salida)
                     generar_resumen_unico(str(salida))
                     registrar_actividad(usuario["id"], usuario["nombre"], delegacion, "Fase 1 - Clasificación zonas")
                     st.success("Archivo generado correctamente")
@@ -259,7 +274,7 @@ with tab2:
         hojas_disponibles = wb.sheetnames
         hojas_operativas = [
             h for h in hojas_disponibles
-            if h.startswith("ZREP_") or h in ("HOSPITALES", "FEDERACION")
+            if h.startswith("ZREP_") or h in ("ALMACEN", "HOSPITALES", "FEDERACION")
         ]
 
         if not hojas_operativas:
@@ -275,7 +290,7 @@ with tab2:
 
             def ws_to_df(wb, nombre):
                 ws = wb[nombre]
-                datos = list(ws.values)
+                datos = [r for r in ws.values if not (r[0] == "← RESUMEN")]
                 if not datos:
                     return pd.DataFrame()
                 return pd.DataFrame(datos[1:], columns=datos[0])
@@ -284,7 +299,7 @@ with tab2:
             df_destino = ws_to_df(wb, hoja_destino)
 
             columnas_mostrar = [
-                c for c in ["Exp", "Consignatario", "Población", "Dirección", "Kgs"]
+                c for c in ["Exp", "Consignatario", "Población", "Kgs", "B.Doc", "Obs.", "AmpFtiI", "ObsClt", "F.Teo.Entr.", "Dirección"]
                 if c in df_origen.columns
             ]
 
@@ -295,42 +310,136 @@ with tab2:
             total_kgs = df_origen["Kgs"].apply(pd.to_numeric, errors="coerce").sum() if "Kgs" in df_origen.columns else 0
             st.markdown(f"**{hoja_origen}** — {len(df_origen)} expediciones · {total_btos} btos · {total_kgs:.0f} kg")
 
-            master_actual = st.checkbox("Seleccionar todas", key="chk_master")
+            sel_key = f"sel_df_{hoja_origen}"
+            if sel_key not in st.session_state or len(st.session_state[sel_key]) != len(df_origen):
+                st.session_state[sel_key] = [False] * len(df_origen)
+
             master_anterior = st.session_state.get("chk_master_prev", False)
 
-            if master_actual and not master_anterior:
-                for idx in df_origen.index:
-                    st.session_state[f"chk_{idx}"] = True
-            elif not master_actual and master_anterior:
-                for idx in df_origen.index:
-                    st.session_state[f"chk_{idx}"] = False
-            else:
-                for idx in df_origen.index:
-                    if f"chk_{idx}" not in st.session_state:
-                        st.session_state[f"chk_{idx}"] = False
+            with st.form(key=f"form_{hoja_origen}"):
+                master_actual = st.checkbox("Seleccionar todas", key="chk_master")
 
-            st.session_state["chk_master_prev"] = master_actual
+                df_editor = df_origen[columnas_mostrar].copy()
+                df_editor.insert(0, "✓", pd.Series(st.session_state[sel_key], dtype=bool))
 
-            seleccion = {}
-            for idx, row in df_origen.iterrows():
-                cols_base = [c for c in ["Exp", "Consignatario", "Población", "Dirección"] if c in df_origen.columns]
-                etiqueta_base = " · ".join(str(row[c]) for c in cols_base if pd.notna(row.get(c)))
-                btos = row.get("Bultos", "")
-                kgs = row.get("Kgs", "")
-                if pd.notna(btos) and pd.notna(kgs):
-                    btos_str = str(int(float(btos))) if str(btos).replace('.','').isdigit() else str(btos)
-                    etiqueta = f"{etiqueta_base}   [{btos_str} btos · {kgs} kg]"
-                else:
-                    etiqueta = etiqueta_base
-                seleccion[idx] = st.checkbox(etiqueta, key=f"chk_{idx}")
+                edited = st.data_editor(
+                    df_editor,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={"✓": st.column_config.CheckboxColumn("✓", default=False)},
+                    disabled=columnas_mostrar,
+                    key=f"editor_{hoja_origen}",
+                )
 
-            indices_seleccionados = [idx for idx, marcado in seleccion.items() if marcado]
+                indices_seleccionados = [df_origen.index[i] for i, sel in enumerate(edited["✓"]) if sel]
+                st.markdown(f"*{len(indices_seleccionados)} expedición(es) seleccionada(s)*")
+
+                accion = st.radio(
+                    "¿Qué hacer con las expediciones seleccionadas?",
+                    ["Mover a otra ruta", "Mover a 2º reparto", "Mover a ALMACEN"],
+                    key="radio_accion",
+                    horizontal=True
+                )
+
+                submitted = st.form_submit_button("Ejecutar acción")
+
+                if submitted:
+                    indices_seleccionados = [df_origen.index[i] for i, sel in enumerate(edited["✓"]) if sel]
+                    if not indices_seleccionados:
+                        st.warning("Selecciona al menos una expedición antes de ejecutar una acción.")
+                    else:
+                        st.session_state[sel_key] = list(edited["✓"])
+                        if master_actual and not master_anterior:
+                            st.session_state[sel_key] = [True] * len(df_origen)
+                        elif not master_actual and master_anterior:
+                            st.session_state[sel_key] = [False] * len(df_origen)
+                        st.session_state["chk_master_prev"] = master_actual
+
+                        if accion == "Mover a otra ruta":
+                            from openpyxl.utils.dataframe import dataframe_to_rows
+                            df_src = ws_to_df(wb, hoja_origen)
+                            df_dst = ws_to_df(wb, hoja_destino)
+                            filas_a_mover = df_src.loc[indices_seleccionados]
+                            df_src_nuevo = df_src.drop(index=indices_seleccionados).reset_index(drop=True)
+                            df_dst_nuevo = pd.concat([df_dst, filas_a_mover], ignore_index=True)
+                            for nombre_hoja, df_nuevo in [(hoja_origen, df_src_nuevo), (hoja_destino, df_dst_nuevo)]:
+                                ws = wb[nombre_hoja]
+                                ws.delete_rows(1, ws.max_row)
+                                for r in dataframe_to_rows(df_nuevo, index=False, header=True):
+                                    ws.append(r)
+                            st.session_state["ajuste_wb"] = wb
+                            registrar_actividad(usuario["id"], usuario["nombre"], delegacion, "Fase 2 - Ajuste Gestores")
+                            st.success(f"{len(indices_seleccionados)} expedición(es) movidas de '{hoja_origen}' a '{hoja_destino}'")
+                            st.rerun()
+
+                        elif accion == "Mover a ALMACEN":
+                            from openpyxl.utils.dataframe import dataframe_to_rows
+                            df_src = ws_to_df(wb, hoja_origen)
+                            filas_alm = df_src.loc[indices_seleccionados]
+                            df_src_nuevo = df_src.drop(index=indices_seleccionados).reset_index(drop=True)
+                            ws_a = wb[hoja_origen]
+                            ws_a.delete_rows(1, ws_a.max_row)
+                            for r in dataframe_to_rows(df_src_nuevo, index=False, header=True):
+                                ws_a.append(r)
+                            if "ALMACEN" not in wb.sheetnames:
+                                ws_alm = wb.create_sheet(title="ALMACEN")
+                                for r in dataframe_to_rows(filas_alm, index=False, header=True):
+                                    ws_alm.append(r)
+                            else:
+                                df_alm_actual = ws_to_df(wb, "ALMACEN")
+                                df_alm_nuevo = pd.concat([df_alm_actual, filas_alm], ignore_index=True)
+                                ws_alm = wb["ALMACEN"]
+                                ws_alm.delete_rows(1, ws.max_row)
+                                for r in dataframe_to_rows(df_alm_nuevo, index=False, header=True):
+                                    ws_alm.append(r)
+                            st.session_state["ajuste_wb"] = wb
+                            registrar_actividad(usuario["id"], usuario["nombre"], delegacion, "Fase 2 - Mover a ALMACEN")
+                            st.success(f"{len(indices_seleccionados)} expedición(es) movidas a ALMACEN")
+                            st.rerun()
+
+                        elif accion == "Mover a 2º reparto":
+                            from openpyxl.utils.dataframe import dataframe_to_rows
+                            nombre_b = hoja_origen + "_B"
+                            df_src = ws_to_df(wb, hoja_origen)
+                            filas_b = df_src.loc[indices_seleccionados]
+                            filas_a = df_src.drop(index=indices_seleccionados).reset_index(drop=True)
+                            ws_a = wb[hoja_origen]
+                            ws_a.delete_rows(1, ws_a.max_row)
+                            for r in dataframe_to_rows(filas_a, index=False, header=True):
+                                ws_a.append(r)
+                            if nombre_b in wb.sheetnames:
+                                ws_b = wb[nombre_b]
+                                ws_b.delete_rows(1, ws_b.max_row)
+                            else:
+                                ws_b = wb.create_sheet(title=nombre_b)
+                            for r in dataframe_to_rows(filas_b, index=False, header=True):
+                                ws_b.append(r)
+                            from openpyxl import Workbook as WB2
+                            wb_nuevo = WB2()
+                            wb_nuevo.remove(wb_nuevo.active)
+                            for nombre_hoja in wb.sheetnames:
+                                ws_orig = wb[nombre_hoja]
+                                ws_nuevo = wb_nuevo.create_sheet(title=nombre_hoja)
+                                for row in ws_orig.iter_rows(values_only=True):
+                                    ws_nuevo.append(list(row) if row else [])
+                            st.session_state["ajuste_wb"] = wb_nuevo
+                            ajuste_salida = workdir / "ajuste_salida.xlsx"
+                            wb_nuevo.save(ajuste_salida)
+                            from add_resumen_unico import generar_resumen_unico
+                            generar_resumen_unico(str(ajuste_salida))
+                            wb_actualizado = load_workbook(ajuste_salida)
+                            st.session_state["ajuste_wb"] = wb_actualizado
+                            registrar_actividad(usuario["id"], usuario["nombre"], delegacion, "Fase 2 - 2º reparto")
+                            st.success(f"2º reparto creado: '{nombre_b}' con {len(filas_b)} expedición(es)")
+                            st.rerun()
+
+            indices_seleccionados = [df_origen.index[i] for i, sel in enumerate(st.session_state[sel_key]) if sel]
             st.markdown(f"*{len(indices_seleccionados)} expedición(es) seleccionada(s)*")
 
             if indices_seleccionados:
                 accion = st.radio(
                     "¿Qué hacer con las expediciones seleccionadas?",
-                    ["Mover a otra ruta", "Mover a 2º reparto"],
+                    ["Mover a otra ruta", "Mover a 2º reparto", "Mover a ALMACEN"],
                     key="radio_accion",
                     horizontal=True
                 )
@@ -351,6 +460,32 @@ with tab2:
                         st.session_state["ajuste_wb"] = wb
                         registrar_actividad(usuario["id"], usuario["nombre"], delegacion, "Fase 2 - Ajuste Gestores")
                         st.success(f"{len(indices_seleccionados)} expedición(es) movidas de '{hoja_origen}' a '{hoja_destino}'")
+                        st.rerun()
+
+                elif accion == "Mover a ALMACEN":
+                    if st.button(f"Mover {len(indices_seleccionados)} exp. → ALMACEN", key="btn_almacen"):
+                        from openpyxl.utils.dataframe import dataframe_to_rows
+                        df_src = ws_to_df(wb, hoja_origen)
+                        filas_alm = df_src.loc[indices_seleccionados]
+                        df_src_nuevo = df_src.drop(index=indices_seleccionados).reset_index(drop=True)
+                        ws_a = wb[hoja_origen]
+                        ws_a.delete_rows(1, ws_a.max_row)
+                        for r in dataframe_to_rows(df_src_nuevo, index=False, header=True):
+                            ws_a.append(r)
+                        if "ALMACEN" not in wb.sheetnames:
+                            ws_alm = wb.create_sheet(title="ALMACEN")
+                            for r in dataframe_to_rows(filas_alm, index=False, header=True):
+                                ws_alm.append(r)
+                        else:
+                            df_alm_actual = ws_to_df(wb, "ALMACEN")
+                            df_alm_nuevo = pd.concat([df_alm_actual, filas_alm], ignore_index=True)
+                            ws_alm = wb["ALMACEN"]
+                            ws_alm.delete_rows(1, ws_alm.max_row)
+                            for r in dataframe_to_rows(df_alm_nuevo, index=False, header=True):
+                                ws_alm.append(r)
+                        st.session_state["ajuste_wb"] = wb
+                        registrar_actividad(usuario["id"], usuario["nombre"], delegacion, "Fase 2 - Mover a ALMACEN")
+                        st.success(f"{len(indices_seleccionados)} expedición(es) movidas a ALMACEN")
                         st.rerun()
 
                 elif accion == "Mover a 2º reparto":
@@ -498,7 +633,7 @@ with tab_refino:
         _wb_tmp = load_workbook(_refino_path, read_only=True)
         _hojas_refino = [
             h for h in _wb_tmp.sheetnames
-            if h.startswith("ZREP_") or h in ("HOSPITALES", "FEDERACION")
+            if h.startswith("ZREP_") or h in ("ALMACEN", "HOSPITALES", "FEDERACION")
         ]
         _wb_tmp.close()
 
@@ -542,31 +677,94 @@ with tab_refino:
 
                 from streamlit_sortables import sort_items as _sort_items
 
+                st.markdown("""
+                <style>
+                [data-testid="stCustomComponentV1"] iframe {
+                    font-family: 'Courier New', Courier, monospace !important;
+                }
+                .sortable-item, .draggable-item, [class*="sortable"] {
+                    font-family: 'Courier New', Courier, monospace !important;
+                }
+                </style>
+                """, unsafe_allow_html=True)
+
                 if f"sortable_version_{_hoja_refino}" not in st.session_state:
                     st.session_state[f"sortable_version_{_hoja_refino}"] = 0
+
+                _almacen_key = f"almacen_items_{_hoja_refino}"
+                if _almacen_key not in st.session_state:
+                    st.session_state[_almacen_key] = []
+
+                _ANCHOS_F4_R1 = {
+                    "Exp": 15, "Consignatario": 30, "Población": 30,
+                    "Kgs": 7, "B.Doc": 5, "Compromiso": 5, "F.Max.Ent": 12, "F.Teo.Entr.": 10, "Dirección": 30,
+                }
+                _ANCHOS_F4 = _ANCHOS_F4_R1
+                _OBS_COLS = ["Obs.", "AmpFtiI", "ObsClt"]
+                _INDENT = "     "
+
+                def _trunc(val, ancho):
+                    s = "" if val is None or str(val).strip() in ("", "nan") else str(val).strip()
+                    if len(s) > ancho:
+                        s = s[:ancho - 1] + "…"
+                    return s + "-" * (ancho - len(s))
+
+                _header_parts = []
+                for _col_name, _ancho in _ANCHOS_F4_R1.items():
+                    if _col_name in _col_idx:
+                        _h = _col_name if len(_col_name) <= _ancho else _col_name[:_ancho - 1] + "…"
+                        _header_parts.append(_h + "-" * (_ancho - len(_h)))
+                _hdr_r1 = "  · ".join(_header_parts)
+                st.markdown(
+                    f'<div style="font-family:\'Courier New\',Courier,monospace;font-size:0.85rem;'
+                    f'background-color:#444;color:#ff0;padding:4px 14px;border-radius:3px;'
+                    f'margin-bottom:4px;white-space:pre;letter-spacing:0;">'
+                    f'##  {_hdr_r1}</div>',
+                    unsafe_allow_html=True,
+                )
 
                 _items_labels = []
                 for _pos, _orig_idx in enumerate(_orden):
                     _row_data = _data_rows[_orig_idx]
-                    _partes_data = []
-                    for _col_name in ["Exp", "Población", "Dirección"]:
+                    _partes_r1 = []
+                    for _col_name, _ancho in _ANCHOS_F4_R1.items():
                         if _col_name in _col_idx:
                             _v = _row_data[_col_idx[_col_name]]
-                            _partes_data.append(str(_v) if _v is not None else "")
-                    _items_labels.append(f"[{_orig_idx}] {_pos + 1}. " + " · ".join(_partes_data))
+                            _partes_r1.append(_trunc(_v, _ancho))
+                    _obs_parts = []
+                    for _col_name in _OBS_COLS:
+                        if _col_name in _col_idx:
+                            _v = _row_data[_col_idx[_col_name]]
+                            _s = "" if _v is None or str(_v).strip() in ("", "nan") else str(_v).strip()
+                            if _s:
+                                _obs_parts.append(_s)
+                    _obs_str = ", ".join(_obs_parts) if _obs_parts else ""
+                    _label = f"{_pos + 1}. " + " · ".join(_partes_r1)
+                    if _obs_str:
+                        _label += f"\n{_INDENT}{_obs_str}"
+                    _label += f"  [{_orig_idx}]"
+                    _items_labels.append(_label)
 
                 _version = st.session_state.get(f"sortable_version_{_hoja_refino}", 0)
-                col_sort, col_empty = st.columns([1, 1])
-                with col_sort:
-                    _sorted_labels = _sort_items(
-                        _items_labels,
-                        direction="vertical",
-                        key=f"sortable_{_hoja_refino}_{_version}",
-                    )
+                _containers_in = [
+                    {"header": _hoja_refino, "items": _items_labels},
+                    {"header": "ALMACEN", "items": st.session_state[_almacen_key]},
+                ]
+                _containers_out = _sort_items(
+                    _containers_in,
+                    multi_containers=True,
+                    direction="vertical",
+                    key=f"sortable_{_hoja_refino}_{_version}",
+                    custom_style=".sortable-item { background-color: #f2f2f2 !important; color: #000000 !important; border: 1px solid #aaaaaa !important; border-radius: 4px !important; margin-bottom: 4px !important; font-weight: bold !important; }",
+                )
 
-                _nuevo_orden = [int(_lbl.split("]")[0][1:]) for _lbl in _sorted_labels]
-                if _nuevo_orden != st.session_state.get(_orden_key):
+                _sorted_labels = _containers_out[0]["items"]
+                _almacen_labels = _containers_out[1]["items"]
+
+                _nuevo_orden = [int(_lbl.split("[")[-1].rstrip("]")) for _lbl in _sorted_labels]
+                if _nuevo_orden != st.session_state.get(_orden_key) or _almacen_labels != st.session_state[_almacen_key]:
                     st.session_state[_orden_key] = _nuevo_orden
+                    st.session_state[_almacen_key] = _almacen_labels
 
                 st.markdown("---")
                 st.markdown("**Mover bloque de expediciones**")
@@ -694,6 +892,26 @@ with tab_refino:
                                 usuario["nombre"],
                                 _hoja_refino,
                             ])
+
+                            # Mover expediciones del contenedor ALMACEN a la hoja ALMACEN
+                            _almacen_labels_save = st.session_state.get(_almacen_key, [])
+                            if _almacen_labels_save:
+                                _almacen_idxs = [int(_lbl.split("[")[-1].rstrip("]")) for _lbl in _almacen_labels_save]
+                                # Usar _save_data_vals (mismo workbook que _save_header_vals) para garantizar alineación
+                                _filas_almacen = [list(_save_data_vals[_ai]) for _ai in _almacen_idxs]
+                                if "ALMACEN" not in _wb_save.sheetnames:
+                                    _ws_alm_save = _wb_save.create_sheet(title="ALMACEN")
+                                    _ws_alm_save.append(list(_save_header_vals))
+                                else:
+                                    _ws_alm_save = _wb_save["ALMACEN"]
+                                    _alm_rows_all = list(_ws_alm_save.iter_rows(values_only=True))
+                                    _alm_hdr_row = next((i + 1 for i, r in enumerate(_alm_rows_all) if r and "Exp" in r), None)
+                                    if _alm_hdr_row:
+                                        for _ci_h, _hv in enumerate(_save_header_vals, 1):
+                                            _ws_alm_save.cell(row=_alm_hdr_row, column=_ci_h).value = _hv
+                                for _fila_alm in _filas_almacen:
+                                    _ws_alm_save.append(_fila_alm)
+                                st.session_state[_almacen_key] = []
 
                             _wb_save.save(_refino_path)
 

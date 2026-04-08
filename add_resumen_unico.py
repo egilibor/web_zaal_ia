@@ -19,6 +19,8 @@ def generar_resumen_unico(ruta_excel: str, paradas_por_hoja: dict = None) -> Non
         del wb["RESUMEN_UNICO"]
 
     operativas = []
+    if "ALMACEN" in wb.sheetnames:
+        operativas.append("ALMACEN")
     if "HOSPITALES" in wb.sheetnames:
         operativas.append("HOSPITALES")
     if "FEDERACION" in wb.sheetnames:
@@ -56,8 +58,9 @@ def generar_resumen_unico(ruta_excel: str, paradas_por_hoja: dict = None) -> Non
         cell.hyperlink = f"#{quote_sheetname(hoja)}!A1"
         cell.font = Font(color="0000FF", underline="single")
 
-        # Hipervínculo de regreso en cada hoja → RESUMEN_UNICO
-        cell_back = ws.cell(row=1, column=ws.max_column + 1)
+        # Hipervínculo de regreso en cada hoja → RESUMEN_UNICO en A1
+        ws.insert_rows(1)
+        cell_back = ws.cell(row=1, column=1)
         cell_back.value = "← RESUMEN"
         cell_back.hyperlink = f"#{quote_sheetname('RESUMEN_UNICO')}!A1"
         cell_back.font = Font(color="0000FF", underline="single", bold=True)
