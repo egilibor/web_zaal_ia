@@ -808,9 +808,10 @@ def reordenar_excel(
                 img = XLImage(img_buffer)
                 img.width = 120
                 img.height = 35
-                celda = ws.cell(row=row_idx, column=col_barcode)
                 ws.row_dimensions[row_idx].height = 28
-                ws.add_image(img, celda.coordinate)
+                from openpyxl.utils import get_column_letter
+                anchor = f"{get_column_letter(col_barcode)}{row_idx + 1}"
+                ws.add_image(img, anchor)
             except Exception:
                 pass
 
