@@ -352,7 +352,7 @@ def run(csv_path: Path, reglas_path: Path, out_path: Path, origen: str, delegaci
     wb_out.remove(wb_out.active)
 
     COLUMNAS_BASE = [
-        "Exp", "Hospital", "Población", "Dirección",
+        "Exp", "Ref.", "Hospital", "Población", "Dirección",
         "Consignatario", "Cliente", "Kgs",
         "Bultos", "Z.Rep", "N. servicio", "C.P.",
         "Latitud", "Longitud",

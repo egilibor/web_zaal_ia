@@ -722,8 +722,14 @@ def reordenar_excel(
             "segmentos": segmentos
         }
 
+    ORDEN_COLS = ["Parada", "Exp", "Ref.", "Consignatario", "C.P.", "Dirección", "Población", "Bultos", "Kgs"]
+
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
         for nombre, df in hojas_resultado.items():
+            cols_ordenadas = [c for c in ORDEN_COLS if c in df.columns]
+            cols_resto = [c for c in df.columns if c not in cols_ordenadas and c != "Barcode"]
+            cols_final = ["Barcode"] if "Barcode" in df.columns else []
+            df = df[cols_ordenadas + cols_resto + cols_final]
             df.to_excel(writer, sheet_name=nombre, index=False)
 
     # Añadir filas de navegación al principio de cada hoja
@@ -783,13 +789,12 @@ def reordenar_excel(
         ws = wb[nombre]
         n_nav = len(hojas_navegacion[nombre]["segmentos"]) + 1
 
-        # Insertar columna Barcode en columna C (posición 3), justo después de Parada (B)
-        ws.insert_cols(3)
-        col_barcode = 3
+        # Añadir columna Barcode al final
+        col_barcode = ws.max_column + 1
         ws.cell(row=n_nav + 1, column=col_barcode).value = "Barcode"
-        ws.column_dimensions["C"].width = 16
+        ws.column_dimensions[get_column_letter(col_barcode)].width = 16
 
-        # Buscar columna "Exp" después del insert (los índices >= 3 se han desplazado)
+        # Buscar columna "Exp"
         col_exp = None
         for cell in ws[n_nav + 1]:
             if cell.value == "Exp":
@@ -810,7 +815,7 @@ def reordenar_excel(
                 img.height = 35
                 ws.row_dimensions[row_idx].height = 28
                 from openpyxl.utils import get_column_letter
-                anchor = f"{get_column_letter(col_barcode)}{row_idx + 1}"
+                anchor = f"{get_column_letter(col_barcode)}{row_idx}"
                 ws.add_image(img, anchor)
             except Exception:
                 pass

@@ -299,7 +299,7 @@ with tab2:
             df_destino = ws_to_df(wb, hoja_destino)
 
             columnas_mostrar = [
-                c for c in ["Exp", "Consignatario", "Población", "Kgs", "B.Doc", "Obs.", "AmpFtiI", "ObsClt", "F.Teo.Entr.", "Dirección"]
+                c for c in ["Exp", "Ref.", "Consignatario", "Población", "Kgs", "B.Doc", "Obs.", "AmpFtiI", "ObsClt", "F.Teo.Entr.", "Dirección"]
                 if c in df_origen.columns
             ]
 
@@ -389,7 +389,7 @@ with tab2:
                                 df_alm_actual = ws_to_df(wb, "ALMACEN")
                                 df_alm_nuevo = pd.concat([df_alm_actual, filas_alm], ignore_index=True)
                                 ws_alm = wb["ALMACEN"]
-                                ws_alm.delete_rows(1, ws.max_row)
+                                ws_alm.delete_rows(1, ws_alm.max_row)
                                 for r in dataframe_to_rows(df_alm_nuevo, index=False, header=True):
                                     ws_alm.append(r)
                             st.session_state["ajuste_wb"] = wb
@@ -670,7 +670,7 @@ with tab_refino:
 
                 _orden = st.session_state[_orden_key]
                 _col_idx = {h: i for i, h in enumerate(_headers) if h is not None}
-                _cols_mostrar = [c for c in ["Exp", "Población", "Dirección", "Consignatario"] if c in _col_idx]
+                _cols_mostrar = [c for c in ["Exp", "Ref.", "Población", "Dirección", "Consignatario"] if c in _col_idx]
 
                 st.markdown(f"**{_hoja_refino}** — {len(_data_rows)} expediciones")
                 st.markdown("---")
