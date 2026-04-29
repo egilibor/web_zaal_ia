@@ -4,6 +4,7 @@ import shutil
 import tempfile
 import subprocess
 import datetime
+import requests
 import pandas as pd
 from pathlib import Path
 
@@ -27,6 +28,23 @@ init_db()
 if "usuario" not in st.session_state:
     render_login()
     st.stop()
+
+# Comprobación de estado de la API de Google Maps (una sola vez por sesión)
+if "google_api_ok" not in st.session_state:
+    try:
+        resp = requests.get(
+            "https://maps.googleapis.com/maps/api/geocode/json",
+            params={"address": "Valencia, España", "key": st.secrets["GOOGLE_MAPS_API_KEY"]},
+            timeout=5,
+        )
+        data = resp.json()
+        if data.get("status") not in ("OK", "ZERO_RESULTS"):
+            st.error("🔌 Desconexión por falta de uso")
+            st.stop()
+        st.session_state.google_api_ok = True
+    except Exception:
+        st.error("🔌 Desconexión por falta de uso")
+        st.stop()
 
 usuario = st.session_state["usuario"]
 
